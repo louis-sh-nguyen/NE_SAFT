@@ -4,3 +4,8 @@ Calculate solubility of gas in glassy polymers using Non-equilibrium thermodynam
 ## Installation Note
 1. Copy sgtpy_NETGP into python site-packages directory.
 2. Run the NET_SAFTgMie_master.py script under new **python 3.9.7** environment.
+
+## Instruction for conda environment
+- conda create -n py397 python=3.9.7
+- conda activate py397
+- pip install pandas scipy numba cython addcopyfighandler colour openpyxl pcsaft pyperclip
