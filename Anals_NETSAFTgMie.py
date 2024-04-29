@@ -2,18 +2,38 @@ import math
 import os
 import time
 from datetime import datetime
-import addcopyfighandler
+# import addcopyfighandler
 import matplotlib.pyplot as plt
 import pandas as pd
-import NET_SAFTgMie_master as NE_SAFT
 import numpy as np
 import re
 import shutil
+import logging
+from functools import wraps
+import NET_SAFTgMie_master as NE_SAFT
+import plot_isotherm as pltIsotherm
 
 rho20_x0_dict = {"PS": np.linspace(0.90, 1.30, 30), "PMMA": np.linspace(0.90, 1.30, 30)}
 ksw_x0_dict = {"PS": np.linspace(0.0, 0.03, 30), "PMMA": np.linspace(0.0, 0.03, 30)}
 
+# Configure logging
+logging.basicConfig(filename='Anals_NETSAFT.log', level=logging.INFO,
+                    format='%(asctime)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
+# Define decorator to log SQL operations
+def log_funcs(func):
+    @wraps(func)    # Preserve metadata of original function, helps debugging
+    def wrapper(*args, **kwargs):
+        start_time = datetime.now()
+        result = func(*args, **kwargs)
+        end_time = datetime.now()
+        execution_time = end_time - start_time
+        logging.info(f"Function {func.__name__} executed in {execution_time.total_seconds()} seconds.")
+        logging.info("")
+        return result
+    return wrapper
+
+@log_funcs
 def fitrho20_fitksw_predictksw_plotpermisotherm(solute: str, polymer: str, temp_list: list[float]):
     # Using time as ID for output files
     start_time = time.time()
@@ -212,6 +232,7 @@ def fitrho20_fitksw_predictksw_plotpermisotherm(solute: str, polymer: str, temp_
 
     print("\n--- Run time %s-%s:\t%.0f seconds ---\n" % (solute, polymer, time.time() - start_time))
 
+@log_funcs
 def rho20PVT_fitksw_predictksw_plotpermisotherm(solute: str, polymer: str, temp_list: list[float]):
     # Using time as ID for output files
     start_time = time.time()
@@ -429,7 +450,7 @@ def rho20PVT_fitksw_predictksw_plotpermisotherm(solute: str, polymer: str, temp_
 
     print("\n--- Run time %s-%s:\t%.0f seconds ---\n" % (solute, polymer, time.time() - start_time))
 
-
+@log_funcs
 def fitrho20_fitksw_predictksw_pg(solute: str, polymer: str, temp_list: list[float]):
     # Using time as ID for output files
     start_time = time.time()
@@ -659,7 +680,7 @@ def fitrho20_fitksw_predictksw_pg(solute: str, polymer: str, temp_list: list[flo
 
     print("\n--- Run time %s-%s:\t%.0f seconds ---\n" % (solute, polymer, time.time() - start_time))
 
-
+@log_funcs
 def rho20PVT_fitrho20_fitksw_predictksw_pg(solute: str, polymer: str, temp_list: list[float]):
     # Using time as ID for output files
     start_time = time.time()
@@ -908,7 +929,85 @@ def rho20PVT_fitrho20_fitksw_predictksw_pg(solute: str, polymer: str, temp_list:
 
     print("\n--- Run time %s-%s:\t%.0f seconds ---\n" % (solute, polymer, time.time() - start_time))
 
+@log_funcs
+def AUTO_plot_isotherm_EQ(solute: str, polymer: str, temp_list: list[float]):
+    # Using time as ID for output files
+    now = datetime.now()  # current time
+    time_ID = now.strftime("%y%m%d_%H%M")  # YYMMDD_HHMM
 
+    # current directory
+    src_dir = os.path.dirname(__file__)
+    # src_dir = os.path.abspath(src_dir)  # absolute path
+    src_dir = r"\\?\%s" % src_dir  # extended path (for very long path length)
+
+    # Create new directory to store results
+    result_folder_dir = (
+        src_dir + f"\\Anals\\plot_EQ_solubility\\{solute}-{polymer}\\{time_ID}"
+    )
+    os.mkdir(result_folder_dir)
+    print("Folder created: " + result_folder_dir)
+
+    # Copy .py code used to result folder
+    src_py_dir = src_dir + "\\Anals_NETSAFTgMie.py"
+    dtn_py_dir = result_folder_dir + f"\\CodeUsed__Anals_NETSAFTgMie__{time_ID}.py"
+    shutil.copy(src_py_dir, dtn_py_dir)
+    print(f".py file copied: {dtn_py_dir}")
+
+    src_NETpy_dir = src_dir + "\\NET_SAFTgMie_master.py"
+    dtn_NETpy_dir = result_folder_dir + f"\\CodeUsed__NET_SAFTgMie__{time_ID}.py"
+    shutil.copy(src_NETpy_dir, dtn_NETpy_dir)
+    print(f".py file copied: {dtn_NETpy_dir}")
+    
+    # Get matching sheets
+    path = os.path.join(os.path.dirname(__file__), "litdata")
+    databasepath = path + "\\%s-%s.xlsx" % (solute, polymer)
+    datafile = pd.ExcelFile(databasepath, engine="openpyxl")
+        
+    for Temp in temp_list:
+        # search for xlsx sheet with matching temp
+        search_pattern = f"^S_{Temp-273}C (.*)"  # strat with {T}C
+        matched_sheets = []
+        for sheet in datafile.sheet_names:
+            if re.search(search_pattern, sheet):
+                matched_sheets.append(sheet)
+        print("Sheets: ", matched_sheets)
+
+        # check if data available before continuing
+        if len(matched_sheets) == 0:
+            continue
+
+        # extract ref number from matched xlxs sheet
+        refno_all = []
+        for sheet in matched_sheets:
+            refno_all.append(sheet[sheet.find("(") + 1 : sheet.find(")")])
+        print(refno_all)
+        
+        # Perform fitting for each sheet
+        for refno in refno_all:  # loop level 2
+            try:
+                
+                # * Plot EQ for each isotherm
+                parameter_set = "default"
+                figname = f"{solute}-{polymer}_{Temp-273}C({refno})_isothermEQ_{parameter_set}_{time_ID}.png"
+                savedir = result_folder_dir + f"\\{figname}"
+                
+                try:                        
+                    pltIsotherm.plot_isotherm_EQ(
+                        sol=solute,
+                        pol=polymer,
+                        T = Temp,
+                        no_p_points=20,
+                        xlxs_sheet_refno_list=[refno],
+                        display_plot=False,
+                        save_plot_dir=savedir
+                    )
+                    
+                except Exception as e:
+                    print("Error: ", e)
+                
+            except Exception as e:
+                print("Error: ", e)                
+        
 if __name__ == "__main__":
     CO2_PS_temp_list = [
         35 + 273,
@@ -962,5 +1061,7 @@ if __name__ == "__main__":
     # rho20PVT_fitrho20_fitksw_predictksw_pg(solute="CO2",polymer="PMMA",temp_list=CO2_PMMA_temp_list)
     # fitrho20_fitksw_predictksw_pg(solute="CO2", polymer="PS", temp_list=CO2_PS_temp_list)    
     # fitrho20_fitksw_predictksw_pg(solute="CO2", polymer="PMMA", temp_list=CO2_PMMA_temp_list)
-    rho20PVT_fitksw_predictksw_plotpermisotherm(solute="CO2", polymer="PS", temp_list=[35+273])
-    fitrho20_fitksw_predictksw_plotpermisotherm(solute="CO2", polymer="PS", temp_list=[35+273])
+    # rho20PVT_fitksw_predictksw_plotpermisotherm(solute="CO2", polymer="PS", temp_list=[35+273])
+    # fitrho20_fitksw_predictksw_plotpermisotherm(solute="CO2", polymer="PS", temp_list=[35+273])
+    AUTO_plot_isotherm_EQ(solute="CO2", polymer="PS",temp_list=CO2_PS_temp_list)
+    AUTO_plot_isotherm_EQ(solute="CO2", polymer="PMMA",temp_list=CO2_PMMA_temp_list)

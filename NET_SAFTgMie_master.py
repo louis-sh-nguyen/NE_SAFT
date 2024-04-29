@@ -114,23 +114,22 @@ def get_mixture_info(sol: str, pol: str, MW2: float = None):
         MW_monomer = MWmonomer_ref[pol]  # [g/mol]
         rho_pol_am = rho_pol_am_ref[pol]  # [g-pol-am/cm^3-pol-am]
         # polymer properties
-        if pol == "PMMA":
+        if pol == "PS":
+            k_sw_ref = 0.0060  # CO2-PS [MPa^-1]
+            n = math.ceil(MW_2 / MW_monomer)  # round up
+            polymer_obj = component(GC={"aCH": 5 * n,"aCCH": 1 * n,"CH2": 1 * n})   #*as-received
+            # polymer_obj = component(GC={"aCH_PS": 5 * n, "aCCH": 1 * n, "CH2": 1 * n})  # *Optimised
+            
+        elif pol == "PMMA":
             k_sw_ref = 0.027  # CO2-PMMA [MPa^-1]
             n = math.ceil(MW_2 / MW_monomer)  # round up
             polymer_obj = component(GC={"CH2": 1 * n, "C": 1 * n, "CH3": 2 * n, "COO": 1 * n})  # * as-received
-            # polymer_obj = component(GC={"CH2": 1 * n, "C": 1 * n, "CH3": 2 * n, "COO_PMMA": 1 * n})  # * Optimised
-            # polymer_obj = component(GC={"CH2": 1 * n, "C": 1 * n, "CH2": 2 * n, "COOH": 1 * n})  # * Test 1
+            # polymer_obj = component(GC={"CH2": 1 * n, "C": 1 * n, "CH3": 2 * n, "COO_PMMA": 1 * n})  # * Optimised            
 
         elif pol == "PEMA":
             k_sw_ref = 0.0  # CO2-PMMA [MPa^-1]
             n = math.ceil(MW_2 / MW_monomer)  # round up
             polymer_obj = component(GC={"CH2": 2 * n, "C": 1 * n, "CH3": 2 * n, "COO": 1 * n})
-
-        elif pol == "PS":
-            k_sw_ref = 0.0060  # CO2-PS [MPa^-1]
-            n = math.ceil(MW_2 / MW_monomer)  # round up
-            # polymer_obj = component(GC={"aCH": 5 * n,"aCCH": 1 * n,"CH2": 1 * n})   #*as-received
-            polymer_obj = component(GC={"aCH_PS": 5 * n, "aCCH": 1 * n, "CH2": 1 * n})  # *Optimised
 
         elif pol == "HDPE":
             k_sw_ref = 0.00  # unknown
@@ -275,7 +274,7 @@ def solve_solubility_NE(
                 x_1 = solution[0]
                 x = hstack([x_1, 1 - x_1])  # [mol/mol-mix]
                 # calculate muad_S
-                print("Forward calculation from rho20")
+                # print("Forward calculation from rho20")
                 omega_1 = (x_1 * MW_1) / (x_1 * MW_1 + (1 - x_1) * MW2)  # [g_sol/g_mix]
                 _rhol_ = 1e6 * (rho20 / MW2) * 1 / (1 - x_1) * (1 - ksw * p_MPa)
                 _rho_i_ = x * _rhol_
