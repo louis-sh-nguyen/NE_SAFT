@@ -11,7 +11,7 @@ import re
 import shutil
 from colour import Color
 
-def plot_pol_Ldensity_isobar_EQ(
+def plot_pol_pvt_EosPrediction(
     pol: str,
     MW2: float = None,
     pol_state: str = "rubbery",
@@ -50,6 +50,15 @@ def plot_pol_Ldensity_isobar_EQ(
             T_exp[i] = df1["T (K)"].values.tolist()
             rho_EQ_calc[i] = [NE_SAFT.get_pol_prop_EQ(T=_T_, p=p, pol=pol, MW2=MW2)[0] for _T_ in T_exp[i]]  # [g/cm^3]
 
+        # Calculate upper limits of x and y axis
+        x_min, x_max = float('inf'), float('-inf')
+        y_min, y_max = float('inf'), float('-inf')
+        for i, p in enumerate(p_unq_list):
+            x_min = min(x_min, min(T_exp[i])-273)
+            x_max = max(x_max, max(T_exp[i])-273)            
+            y_min = min(y_min, min(rho_exp[i].values.tolist() + rho_EQ_calc[i]))    # tolist() converts pandas series to list for joining two lists
+            y_max = max(y_max, max(rho_exp[i].values.tolist() + rho_EQ_calc[i]))    
+            
         # Plotting
         fig = plt.figure(figsize=(4.8, 3.5))
         ax = fig.add_subplot(111)
@@ -75,23 +84,30 @@ def plot_pol_Ldensity_isobar_EQ(
             )
 
         ax.set_xlabel("T (°C)")
-        ax.set_ylabel(r"$\rho_{pol}^{0}$ ($g/cm^{3}$)")
+        ax.set_ylabel(r"$\rho_{pol}^{0}$ ($g \; / \; cm^{3}$)")
         ax.set_title(f"{pol} pure density")
         
-        ax.set_xlim(left=0, right=300)
-        # ax.set_ylim(bottom=0.90, top=1.20)  # PS
-        ax.set_ylim(bottom=1.0, top=1.30)  # PMMA
+        # Adjust x and y tick to cover all data
+        # Get the length of major ticks on the x-axis
+        x_major_tick_length = ax.get_xticks()[1] - ax.get_xticks()[0]
+        
+        # Get the length of major ticks on the y-axis
+        y_major_tick_length = ax.get_yticks()[1] - ax.get_yticks()[0]
+        
+        # Set adjust x and y tick to cover all data
+        ax.set_xlim(left=x_min - x_major_tick_length, right=x_max + x_major_tick_length)
+        ax.set_ylim(bottom=y_min - y_major_tick_length, top=y_max + y_major_tick_length)    
         ax.tick_params(direction="in")
         ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left").set_visible(True)
         if save_plot_dir != None:
-            plt.savefig(save_plot_dir, dpi=1200, transparent=True)
+            plt.savefig(save_plot_dir, dpi=1200)
             print(f"Plot saved: {save_plot_dir}")
             print("")
         if display_plot == True:
             plt.show()
 
 
-def plot_pol_PVT_exp(
+def plot_pol_pvt_exp(
     pol: str,
     MW2: float = None,
     pol_state: str = "all",
@@ -167,17 +183,21 @@ if __name__ == "__main__":
     time_ID = now.strftime("%y%m%d_%H%M")  # YYMMDD_HHMM
     
     # Create new directory to store results
-    result_folder_dir = src_dir 
-    figname = f"PMMA_PVT_default_{time_ID}.png"
-    savedir = result_folder_dir + f"\\{figname}"
+    result_folder_dir = f'{src_dir}\\Anals\\Paper plots'
+    # figname = f"PS_PVT_default_{time_ID}.png"
+    # savedir = result_folder_dir + f"\\{figname}"
                     
-    plot_pol_Ldensity_isobar_EQ(pol="PMMA",
-                                pol_state="all",
-                                display_plot=True, 
-                                save_plot_dir=savedir,
-                                )
+    # plot_pol_pvt_EosPrediction(pol="PS",
+    #                             pol_state="rubbery",
+    #                             display_plot=False, 
+    #                             save_plot_dir=savedir,
+    #                             )
 
     # plot_pol_PVT_exp(pol="PS",
     #                  display_plot=True, 
     #                  save_plot_dir=savedir,
     #                  )
+    
+    NE_SAFT.fit_polPVT_multiTait(xlxs_sheet='PMMA_rubbery', 
+                                 display_plot=True, 
+                                 save_plot_dir=result_folder_dir + f"\\PMMA_rubbery_multiTait_{time_ID}.png")

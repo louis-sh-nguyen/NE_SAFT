@@ -2,14 +2,20 @@ import math
 import os
 import time
 from datetime import datetime
-# import addcopyfighandler
 import matplotlib.pyplot as plt
 import pandas as pd
-import NET_SAFTgMie_master as NE_SAFT
+# import NET_SAFTgMie_master as NE_SAFT
+import _TEST_NET_SAFTgMie as NE_SAFT
 import numpy as np
 import re
 import logging
 from functools import wraps
+
+# Workaround to avoid error messages from addcopyfighandler
+import warnings
+from numba.core.errors import NumbaDeprecationWarning, NumbaPendingDeprecationWarning
+warnings.filterwarnings("ignore")
+import addcopyfighandler
 
 # Define decorator to log SQL operations
 def logger(func):
@@ -26,14 +32,14 @@ def logger(func):
 
 @logger
 def plot_isotherm_EQvNE(
-    p_l: float,
-    p_u: float,
-    no_of_points: int,
     T: float,
+    ksw_list: list[float],
+    rho20: float,
     sol: str,
     pol: str,
-    ksw_list: list[float],
-    rho20: float = None,
+    p_l: float = None,
+    p_u: float = None,
+    no_p_points: int = 20,
     MW2: float = None,
     xlxs_sheet_refno_list: list[str] = None,
     display_plot: bool = True,
@@ -94,9 +100,33 @@ def plot_isotherm_EQvNE(
 
     hasExpData = True if len(matched_sheets) > 0 else False
 
-    # calculating solubilityno_p_points
-    p_calc = np.linspace(p_l, p_u, no_of_points)  # [Pa]
+    # Create empty placeholders, return None in case calculation fails
+    p_MPa_exp_list = [None for i in range(len(matched_sheets))]
+    solubility_exp_list = [None for i in range(len(matched_sheets))]  
+    
+    # Importing exp data
+    if hasExpData == True:
+        for i, sheet in enumerate(matched_sheets):
+            p_MPa_exp_list[i] = np.asarray(dict[sheet]["P [MPa]"])
+            solubility_exp_list[i] = np.asarray(dict[sheet]["Solubility [g-sol/g-pol-am]"])
+    
+    # Get pressure range
+    if p_l != None and p_u != None:
+        p_calc = np.linspace(p_l, p_u, no_p_points)  # [Pa]
+    else:
+        if hasExpData == True:
+            for i, sheet in enumerate(matched_sheets):
+                current_max_p_MPa = p_MPa_exp_list[i].max()
+                if i == 0:
+                    max_p_MPa = current_max_p_MPa
+                else:
+                    max_p_MPa = max(current_max_p_MPa, max_p_MPa)
+        
+        max_p = max_p_MPa * 1e6  # [Pa]
+        p_calc = np.linspace(1, max_p, no_p_points)    # [Pa]
+        
     p_MPa_calc = p_calc * 1e-6
+    print("p_cal = ", p_calc)
 
     # Create empty placeholders, return None in case calculation fails
     solubility_NE_calc_list = [None for i in range(len(ksw_list))]
@@ -113,9 +143,9 @@ def plot_isotherm_EQvNE(
             "solubility at ksw=%g =\t" % ksw_list[i], solubility_NE_calc_list[i]
         )  # calculated NE solubility with ksw != 0
 
-    # calculated EQ solubility
-    solubility_EQ_list = [NE_SAFT.solve_solubility_EQ(T, p_, sol, pol, MW2) for p_ in p_calc]
-    print("\nsolubility_EQ = ", solubility_EQ_list)
+    #* Calculate EQ solubility
+    # solubility_EQ_list = [NE_SAFT.solve_solubility_EQ(T, p_, sol, pol, MW2) for p_ in p_calc]
+    # print("\nsolubility_EQ = ", solubility_EQ_list)
 
     # Original label
     label_EQ = "EQ"
@@ -130,26 +160,48 @@ def plot_isotherm_EQvNE(
         if len(matched_sheets) == 1:
             p_exp_list = p_MPa_exp_list[0] * 1e6  # [Pa]
             sol_exp_list = solubility_exp_list[0]
-            solubility_calc_evaluation_EQ = [NE_SAFT.solve_solubility_EQ(T, p_, sol, pol, MW2) for p_ in p_exp_list]
+            # solubility_calc_evaluation_EQ = [NE_SAFT.solve_solubility_EQ(T, p_, sol, pol, MW2) for p_ in p_exp_list]
             # try:
             #     AAD_percent_EQ = get_fitting_AAD(sol_exp_list, solubility_calc_evaluation_EQ) * 100  # [%]
             # except:
             #     AAD_percent_EQ = 0
             # print("AAD%% for EQ: AAD%% = %.1f%%" % (AAD_percent_EQ))
             # label_EQ += " (AAD%%=%.1f%%)" % AAD_percent_EQ
+            
+            # Calculate AAD for NE
             # for i, ksw_ in enumerate(ksw_list):
             #     solubility_calc_evaluation_NE_list[i] = [
-            #         solve_solubility_NE(T, _p_, sol, pol, MW2, ksw_list[i], rho20) for _p_ in p_exp_list
+            #         NE_SAFT.solve_solubility_NE(T, _p_, sol, pol, MW2, ksw_list[i], rho20) for _p_ in p_exp_list
             #     ]
             #     try:
             #         AAD_percent_NE[i] = (
-            #             get_fitting_AAD(sol_exp_list, solubility_calc_evaluation_NE_list[i]) * 100
+            #             NE_SAFT.get_fitting_AAD(sol_exp_list, solubility_calc_evaluation_NE_list[i]) * 100
             #         )  # [%]
             #     except:
             #         AAD_percent_NE[i] = 0
             #     print("AAD%% for NE ksw=%g: AAD%% = %.1f%%" % (ksw_, AAD_percent_NE[i]))
-            #     label_NE[i] += " (AAD%%=%.1f%%)" % AAD_percent_NE[i]
+                # label_NE[i] += " (AAD%%=%.1f%%)" % AAD_percent_NE[i]
 
+    # Calculate upper limits of x and y axis    
+    x_min, x_max = float('inf'), float('-inf')
+    y_min, y_max = float('inf'), float('-inf')
+    
+    # Get min and max values for x and y axis from experimental data
+    for i, sheet in enumerate(matched_sheets):
+        x_min = min(x_min, min(p_MPa_exp_list[i]))
+        x_max = max(x_max, max(p_MPa_exp_list[i]))
+        y_min = min(y_min, min(solubility_exp_list[i]))
+        y_max = max(y_max, max(solubility_exp_list[i]))   
+        
+    # Get min and max values for x and y axis from EQ solubility
+    # y_min = min(y_min, min(solubility_EQ_list))
+    # y_max = max(y_max, max(solubility_EQ_list))
+    
+    # Get min and max values for x and y axis from NE solubility
+    for i, ksw_ in enumerate(ksw_list):
+        y_min = min(y_min, min(solubility_NE_calc_list[i]))
+        y_max = max(y_max, max(solubility_NE_calc_list[i])) 
+    
     # Plotting
     fig = plt.figure()
     ax = fig.add_subplot(111)
@@ -167,15 +219,15 @@ def plot_isotherm_EQvNE(
                 label=f"exp: {ref_ID[i]} ({ref_no[i]})",
             )
 
-    # EQ solubility
-    ax.plot(
-        p_MPa_calc,
-        solubility_EQ_list,
-        color=NE_SAFT.custom_colours[1],
-        marker="None",
-        linestyle="solid",
-        label=label_EQ,
-    )
+    #* EQ solubility
+    # ax.plot(
+    #     p_MPa_calc,
+    #     solubility_EQ_list,
+    #     color=NE_SAFT.custom_colours[1],
+    #     marker="None",
+    #     linestyle="solid",
+    #     label=label_EQ,
+    # )
 
     # NE solubility
     for i, ksw_ in enumerate(ksw_list):
@@ -189,7 +241,7 @@ def plot_isotherm_EQvNE(
         )
     # labelling
     ax.set_xlabel(r"p (MPa)")
-    ax.set_ylabel(r"Solubility ($g_{sol} / g_{pol\:am}$)")
+    ax.set_ylabel(r"Solubility ($g_{sol} / g_{pol}$)")
     ax.set_title("%s-%s at %.0f°C " % (sol, pol, T - 273))
     # ax.annotate(
     #     r"NE $\rho_{20}$ = %.4f $g/cm^{-3}$" % rho20,
@@ -199,13 +251,23 @@ def plot_isotherm_EQvNE(
     #     va="center",
     #     fontsize="xx-small",
     # )
-    # styling
-    ax.set_xlim(left=0)
-    ax.set_ylim(bottom=0)
-    # ax.grid(visible=True)
+    
+    # Adjust x and y tick to cover all data
+    # Get the length of major ticks on the x-axis
+    x_major_tick_length = ax.get_xticks()[1] - ax.get_xticks()[0]
+    
+    # Get the length of major ticks on the y-axis
+    y_major_tick_length = ax.get_yticks()[1] - ax.get_yticks()[0]
+    
+    # Set adjust x and y tick to cover all data
+    ax.set_xlim(left=0, right=x_max + x_major_tick_length)
+    ax.set_ylim(bottom=0, top=y_max + y_major_tick_length)
+    
+    # Set ticks to appear inside
     ax.tick_params(direction="in")
     legend_ncol = 1 if (len(matched_sheets) + len(ksw_list)) < 5 else 2
     ax.legend(ncol=legend_ncol).set_visible(True)
+    
     if save_plot_dir != None:
         plt.savefig(save_plot_dir, dpi=1200)
         print(f"Plot saved: {save_plot_dir}")
@@ -214,10 +276,220 @@ def plot_isotherm_EQvNE(
         plt.show()
 
 @logger
+def plot_isotherm_EQvNE_multiT(
+    T_list: list[float],
+    ksw_list: list[float],
+    rho20_list: list[float],
+    sol: str,
+    pol: str,
+    p_l: float = None,
+    p_u: float = None,
+    no_p_points: int = 20,
+    MW2: float = None,
+    xlxs_sheet_refno_list: list[str] = None,
+    display_plot: bool = True,
+    save_plot_dir: str = None,
+) -> None:
+    (
+        _eos_mix,
+        _eos_sol,
+        _MW_1,
+        _MW_2,
+        _MW_monomer,
+        _rho_2_am_dry,
+        _k_sw,
+    ) = NE_SAFT.get_mixture_info(sol, pol, MW2)    
+    MW2 = MW2 if MW2 != None else _MW_2  # [g/mol]
+
+    # Check T_list, ksw_list and rho20_list have the same length
+    if len(T_list) != len(ksw_list) or len(T_list) != len(rho20_list):
+        raise ValueError("T_list, ksw_list and rho20_list must have the same length")
+    
+    # Empty array to store results
+    hasExpData = [None for i in range(len(T_list))]
+    matched_sheets = [None for i in range(len(T_list))]
+    ref_no = [None for i in range(len(T_list))]
+    ref_ID = [None for i in range(len(T_list))]
+    dict = {}  # dictionary of all matched sheet df
+    
+    # Import exp data
+    for i, T in enumerate(T_list):
+        try:
+            # Read exp file
+            path = os.path.join(os.path.dirname(__file__), "litdata")
+            refpath = path + "/references.xlsx"
+            databasepath = path + "/%s-%s.xlsx" % (sol, pol)
+            reffile = pd.ExcelFile(refpath, engine="openpyxl")
+            datafile = pd.ExcelFile(databasepath, engine="openpyxl")
+            
+            # Get all sheets matching T
+            # print(file.sheet_names)
+            matched_sheets[i] = []
+            if xlxs_sheet_refno_list == None:
+                search_pattern = f"^S_{T-273}C (.*)"  # strat with S_{T-273}C ()
+                for sheet in datafile.sheet_names:
+                    if re.search(search_pattern, sheet):
+                        matched_sheets[i].append(sheet)
+            elif isinstance(xlxs_sheet_refno_list, list):  # check if a list
+                for j in xlxs_sheet_refno_list:
+                    search_pattern = f"^S_{T-273}C.\({j}\)"
+                    for sheet in datafile.sheet_names:
+                        if re.search(search_pattern, sheet):
+                            matched_sheets[i].append(sheet)
+
+            print(f"Sheets for {T-273}C: ", matched_sheets[i])
+
+            ref_no[i] = []
+            for sheet in matched_sheets[i]:
+                dict[sheet] = pd.read_excel(datafile, sheet)
+                dict[sheet].dropna(subset=["P [MPa]"], inplace=True)
+                ref_no[i].append(sheet[sheet.find("(") + 1 : sheet.find(")")])
+            print(ref_no[i])
+
+            ref_ID[i] = []
+            ref_df = pd.read_excel(reffile, "references")
+            # print(ref_df)
+            for no in ref_no[i]:
+                ref_ID[i].append(ref_df.loc[ref_df["# ref"] == f"[{no}]", "refID"].item())
+                # print(ref_ID[i])
+            print(ref_ID[i])
+        except Exception as e:
+            print("")
+            print("Error - importing exp data failed:")
+            print(e)
+        # print(len(matched_sheets[i]))
+        hasExpData[i] = True if len(matched_sheets[i]) > 0 else False
+    print("hasExpData = ", hasExpData)
+    
+    # Empty array to store results
+    solubility_EQ = [None for i in range(len(T_list))]
+    solubility_NE = [None for i in range(len(T_list))]
+    
+    # Get pressure range
+    if p_l != None and p_u != None:
+        p_calc = np.linspace(p_l, p_u, no_p_points)  # [Pa]
+    else:
+        for i, T in enumerate(T_list):
+            if hasExpData[i] == True:
+                for j, sheet in enumerate(matched_sheets[i]):
+                    current_max_p_MPa = np.asarray(dict[sheet]["P [MPa]"]).max()
+                    if i == 0 and j == 0:
+                        max_p_MPa = current_max_p_MPa
+                    else:
+                        max_p_MPa = max(current_max_p_MPa, max_p_MPa)
+        
+        max_p = max_p_MPa * 1e6 # [Pa]
+        p_calc = np.linspace(1, max_p, no_p_points)    # [Pa]
+        
+    p_MPa_calc = p_calc * 1e-6  # [MPa]        
+        
+    for i, T in enumerate(T_list):
+        
+        #* Calculate EQ solubility
+        solubility_EQ[i] = [NE_SAFT.solve_solubility_EQ(T, p_, sol, pol, MW2) for p_ in p_calc]
+        solubility_NE[i] = [NE_SAFT.solve_solubility_NE(T, p_, sol, pol, MW2, ksw_list[i], rho20_list[i]) for p_ in p_calc]
+        print("\nSolubility_EQ at %s°C: " % (T - 273), solubility_EQ[i])
+        print("\nSolubility_NE at %s°C and ksw = %g:" % (T - 273, ksw_list[i]), solubility_NE[i])
+    
+    # Calculate upper limits of x and y axis
+    x_min, x_max = float('inf'), float('-inf')
+    y_min, y_max = float('inf'), float('-inf')
+    for i, T in enumerate(T_list):
+        for j, sheet in enumerate(matched_sheets[i]):
+            x_min = min(x_min, min(dict[sheet]["P [MPa]"]))
+            x_max = max(x_max, max(dict[sheet]["P [MPa]"]))
+            y_min = min(y_min, min(dict[sheet]["Solubility [g-sol/g-pol-am]"]))
+            y_max = max(y_max, max(dict[sheet]["Solubility [g-sol/g-pol-am]"]))
+        y_min = min(y_min, min(solubility_EQ[i]))
+        y_max = max(y_max, max(solubility_EQ[i]))
+        if solubility_NE[i] is not None:
+            y_min = min(y_min, min([x for x in solubility_NE[i] if x is not None]))
+            y_max = max(y_max, max([x for x in solubility_NE[i] if x is not None]))
+
+    # Plotting
+    # fig = plt.figure()    #* To be restored
+    fig = plt.figure(figsize=[4.0, 3.5])    #! To be deleted
+    
+    ax = fig.add_subplot(111)
+
+    for i, T in enumerate(T_list):
+        
+        # Exp solubility
+        if hasExpData[i] == True:
+            for j, sheet in enumerate(matched_sheets[i]):
+                ax.plot(
+                    dict[sheet]["P [MPa]"],
+                    dict[sheet]["Solubility [g-sol/g-pol-am]"],
+                    color=NE_SAFT.custom_colours[i],
+                    marker=NE_SAFT.custom_markers[j],
+                    # markersize=2,   #! To be deleted
+                    linestyle="None",
+                    markerfacecolor="None",
+                    label=f"exp {T-273}°C: {ref_ID[i][j]} ({ref_no[i][j]})",
+                )
+                
+        #* EQ calc
+        ax.plot(
+            p_MPa_calc,
+            solubility_EQ[i],
+            color=NE_SAFT.custom_colours[i],
+            marker="None",
+            linestyle="dashed",
+            label=f"EQ model {T-273}°C",
+        )
+
+    # NE solubility    
+        ax.plot(
+            p_MPa_calc,
+            solubility_NE[i],
+            color=NE_SAFT.custom_colours[i],
+            marker="None",
+            linestyle="solid", 
+            label=f"NE model {T-273}°C",
+        )
+        
+    # Labelling
+    # ax.set_xlabel(r"p (MPa)")   #* To be restored
+    # ax.set_ylabel(r"Solubility ($g_{sol} \; / \;g_{pol}$)") #* To be restored
+    # ax.set_title(r"%s-%s" % (sol, pol)) #* To be restored
+    
+    # Adjust x and y tick to cover all data
+    # Get the length of major ticks on the x-axis
+    x_major_tick_length = ax.get_xticks()[1] - ax.get_xticks()[0]
+    
+    # Get the length of major ticks on the y-axis
+    y_major_tick_length = ax.get_yticks()[1] - ax.get_yticks()[0]
+    
+    # Set adjust x and y tick to cover all data
+    ax.set_xticks(range(0, 6))  #! To be deleted
+    ax.set_xlim(left=0, right=x_max + x_major_tick_length)
+    ax.set_ylim(bottom=0, top=y_max + y_major_tick_length)    
+    ax.set_xlim(left=0, right=5)  #! To be deleted
+    # ax.set_ylim(bottom=0, top=0.10 )    #! for PS, To be deleted
+    ax.set_ylim(bottom=0, top=0.20 )    #! for PMMA, To be deleted
+    ax.tick_params(axis='both', which='major', labelsize=15)    #! To be deleted
+    
+
+
+    # Set ticks to appear inside
+    ax.tick_params(direction="in")
+    
+    # Dynamic column number of legend
+    # ax.legend(fontsize='xx-small', loc='upper left').set_visible(True)
+    
+    if save_plot_dir != None:
+        plt.savefig(save_plot_dir, dpi=1200)
+        print(f"Plot saved: {save_plot_dir}")
+        print("")
+    if display_plot == True:
+        plt.show()
+
+
+@logger
 def plot_isotherm_EQ(
     T: float,
     sol: str,
-    pol: str,    
+    pol: str,
     p_l: float = None,
     p_u: float = None,
     no_p_points: int = 20,
@@ -249,7 +521,7 @@ def plot_isotherm_EQ(
         # print(file.sheet_names)
         matched_sheets = []
         if xlxs_sheet_refno_list == None:
-            search_pattern = f"^S_{T-273}C (.*)"  # strat with S_{T-273}C
+            search_pattern = f"^S_{T-273}C (.*)"  # start with S_{T-273}C
             for sheet in datafile.sheet_names:
                 if re.search(search_pattern, sheet):
                     matched_sheets.append(sheet)
@@ -320,7 +592,9 @@ def plot_isotherm_EQ(
         x_min = min(x_min, min(p_MPa_exp_list[i]))
         x_max = max(x_max, max(p_MPa_exp_list[i]))
         y_min = min(y_min, min(solubility_exp_list[i]))
-        y_max = max(y_max, max(solubility_exp_list[i]))        
+        y_max = max(y_max, max(solubility_exp_list[i]))   
+    y_min = min(y_min, min(solubility_EQ_list))
+    y_max = max(y_max, max(solubility_EQ_list))
     
     # Plotting
     fig = plt.figure()
@@ -379,6 +653,371 @@ def plot_isotherm_EQ(
     if display_plot == True:
         plt.show()
 
+@logger
+def plot_isotherm_EQ_multiT(
+    T_list: list[float],
+    sol: str,
+    pol: str,
+    p_l: float = None,
+    p_u: float = None,
+    no_p_points: int = 20,
+    MW2: float = None,
+    xlxs_sheet_refno_list: list[str] = None,
+    display_plot: bool = True,
+    save_plot_dir: str = None,
+):
+    (
+        _eos_mix,
+        _eos_sol,
+        _MW_1,
+        _MW_2,
+        _MW_monomer,
+        rho_2_am_dry,
+        _k_sw,
+    ) = NE_SAFT.get_mixture_info(sol, pol, MW2)
+    MW2 = MW2 if MW2 != None else _MW_2
+    
+    hasExpData = [None for i in range(len(T_list))]
+    matched_sheets = [None for i in range(len(T_list))]
+    ref_no = [None for i in range(len(T_list))]
+    ref_ID = [None for i in range(len(T_list))]
+    dict = {}  # dictionary of all matched sheet df
+    
+    # Import exp data
+    for i, T in enumerate(T_list):
+        try:
+            # Read exp file
+            path = os.path.join(os.path.dirname(__file__), "litdata")
+            refpath = path + "/references.xlsx"
+            databasepath = path + "/%s-%s.xlsx" % (sol, pol)
+            reffile = pd.ExcelFile(refpath, engine="openpyxl")
+            datafile = pd.ExcelFile(databasepath, engine="openpyxl")
+            
+            # Get all sheets matching T
+            # print(file.sheet_names)
+            matched_sheets[i] = []
+            if xlxs_sheet_refno_list == None:
+                search_pattern = f"^S_{T-273}C (.*)"  # strat with S_{T-273}C ()
+                for sheet in datafile.sheet_names:
+                    if re.search(search_pattern, sheet):
+                        matched_sheets[i].append(sheet)
+            elif isinstance(xlxs_sheet_refno_list, list):  # check if a list
+                for j in xlxs_sheet_refno_list:
+                    search_pattern = f"^S_{T-273}C.\({j}\)"
+                    for sheet in datafile.sheet_names:
+                        if re.search(search_pattern, sheet):
+                            matched_sheets[i].append(sheet)
+
+            print(f"Sheets for {T-273}C: ", matched_sheets[i])
+
+            ref_no[i] = []
+            for sheet in matched_sheets[i]:
+                dict[sheet] = pd.read_excel(datafile, sheet)
+                dict[sheet].dropna(subset=["P [MPa]"], inplace=True)
+                ref_no[i].append(sheet[sheet.find("(") + 1 : sheet.find(")")])
+            print(ref_no[i])
+
+            ref_ID[i] = []
+            ref_df = pd.read_excel(reffile, "references")
+            # print(ref_df)
+            for no in ref_no[i]:
+                ref_ID[i].append(ref_df.loc[ref_df["# ref"] == f"[{no}]", "refID"].item())
+                # print(ref_ID[i])
+            print(ref_ID[i])
+        except Exception as e:
+            print("")
+            print("Error - importing exp data failed:")
+            print(e)
+        # print(len(matched_sheets[i]))
+        hasExpData[i] = True if len(matched_sheets[i]) > 0 else False
+    print("hasExpData = ", hasExpData)
+    
+    # Empty array to store results
+    # solubility_EQ = [None for i in range(len(T_list))]
+    
+    # Get pressure range
+    if p_l != None and p_u != None:
+        p_calc = np.linspace(p_l, p_u, no_p_points)  # [Pa]
+    else:
+        for i, T in enumerate(T_list):
+            if hasExpData[i] == True:
+                for j, sheet in enumerate(matched_sheets[i]):
+                    current_max_p_MPa = np.asarray(dict[sheet]["P [MPa]"]).max()
+                    if i == 0 and j == 0:
+                        max_p_MPa = current_max_p_MPa
+                    else:
+                        max_p_MPa = max(current_max_p_MPa, max_p_MPa)
+        
+        max_p = max_p_MPa * 1e6 # [Pa]
+        p_calc = np.linspace(1, max_p, no_p_points)    # [Pa]
+        p_MPa_calc = p_calc * 1e-6  # [MPa]        
+    
+    for i, T in enumerate(T_list):
+        # Calculate EQ solubility
+        # solubility_EQ[i] = [NE_SAFT.solve_solubility_EQ(T, p_, sol, pol, MW2) for p_ in p_calc]
+        # print("\nsolubility_EQ at %s°C = " % (T - 273), solubility_EQ[i])
+        continue
+
+    # Calculate upper limits of x and y axis    
+    x_min, x_max = float('inf'), float('-inf')
+    y_min, y_max = float('inf'), float('-inf')
+    for i, T in enumerate(T_list):
+        for j, sheet in enumerate(matched_sheets[i]):
+            x_min = min(x_min, min(dict[sheet]["P [MPa]"]))
+            x_max = max(x_max, max(dict[sheet]["P [MPa]"]))
+            y_min = min(y_min, min(dict[sheet]["Solubility [g-sol/g-pol-am]"]))
+            y_max = max(y_max, max(dict[sheet]["Solubility [g-sol/g-pol-am]"]))
+        # y_min = min(y_min, min(solubility_EQ[i]))
+        # y_max = max(y_max, max(solubility_EQ[i]))
+    
+    # Plotting
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    nlegendcount = 0
+    for i, T in enumerate(T_list):
+        
+        # EQ calc
+        # ax.plot(
+        #     p_MPa_calc,
+        #     solubility_EQ[i],
+        #     color=NE_SAFT.custom_colours[i],
+        #     marker="None",
+        #     linestyle="solid",
+        #     label=f"EQ model {T-273}°C",
+        # )
+        # nlegendcount += 1
+        
+        # Exp data
+        if hasExpData[i] == True:
+            for j, sheet in enumerate(matched_sheets[i]):
+                ax.plot(
+                    dict[sheet]["P [MPa]"],
+                    dict[sheet]["Solubility [g-sol/g-pol-am]"],
+                    color=NE_SAFT.custom_colours[i],
+                    marker=NE_SAFT.custom_markers[j],
+                    linestyle="None",
+                    markerfacecolor="None",
+                    label=f"exp {T-273}°C: {ref_ID[i][j]} ({ref_no[i][j]})",
+                )
+                nlegendcount += 1
+
+    # Labelling
+    ax.set_xlabel(r"p (MPa)")
+    ax.set_ylabel(r"Solubility ($g_{sol} \; / \;g_{pol}$)")
+    ax.set_title(r"%s-%s" % (sol, pol))
+    
+    # Adjust x and y tick to cover all data
+    # Get the length of major ticks on the x-axis
+    x_major_tick_length = ax.get_xticks()[1] - ax.get_xticks()[0]
+    
+    # Get the length of major ticks on the y-axis
+    y_major_tick_length = ax.get_yticks()[1] - ax.get_yticks()[0]
+    
+    # Set adjust x and y tick to cover all data
+    ax.set_xlim(left=0, right=x_max + x_major_tick_length)
+    # ax.set_ylim(bottom=0, top=y_max + y_major_tick_length)  # Default    
+    ax.set_ylim(bottom=0, top=y_max + 2*y_major_tick_length)  # Paper plot
+
+    # Set ticks to appear inside
+    ax.tick_params(direction="in")
+    
+    # Dynamic column number of legend
+    legend_ncol = 1 if (len(matched_sheets)) < 5 else 2
+    ax.legend(fontsize='xx-small', loc='upper left').set_visible(True)
+    
+    if save_plot_dir != None:
+        plt.savefig(save_plot_dir, dpi=1200)
+        print(f"Plot saved: {save_plot_dir}")
+        print("")
+    if display_plot == True:
+        plt.show()
+
+
+def plot_density_EQvNE_multiT(
+    T_list: list[float],
+    ksw_list: list[float],
+    rho20_list: list[float],
+    sol: str,
+    pol: str,
+    p_l: float = None,
+    p_u: float = None,
+    no_p_points: int = 20,
+    MW2: float = None,
+    xlxs_sheet_refno_list: list[str] = None,
+    display_plot: bool = True,
+    save_plot_dir: str = None,
+) -> None:
+    (
+        _eos_mix,
+        _eos_sol,
+        _MW_1,
+        _MW_2,
+        _MW_monomer,
+        _rho_2_am_dry,
+        _k_sw,
+    ) = NE_SAFT.get_mixture_info(sol, pol, MW2)    
+    MW2 = MW2 if MW2 != None else _MW_2  # [g/mol]
+
+    # Check T_list, ksw_list and rho20_list have the same length
+    if len(T_list) != len(ksw_list) or len(T_list) != len(rho20_list):
+        raise ValueError("T_list, ksw_list and rho20_list must have the same length")
+
+    # Empty array to store results
+    hasExpData = [None for i in range(len(T_list))]
+    matched_sheets = [None for i in range(len(T_list))]
+    ref_no = [None for i in range(len(T_list))]
+    ref_ID = [None for i in range(len(T_list))]
+    dict = {}  # dictionary of all matched sheet df
+    
+    # Import exp data
+    for i, T in enumerate(T_list):
+        try:
+            # Read exp file
+            path = os.path.join(os.path.dirname(__file__), "litdata")
+            refpath = path + "/references.xlsx"
+            databasepath = path + "/%s-%s.xlsx" % (sol, pol)
+            reffile = pd.ExcelFile(refpath, engine="openpyxl")
+            datafile = pd.ExcelFile(databasepath, engine="openpyxl")
+            
+            # Get all sheets matching T
+            # print(file.sheet_names)
+            matched_sheets[i] = []
+            if xlxs_sheet_refno_list == None:
+                search_pattern = f"^S_{T-273}C (.*)"  # strat with S_{T-273}C ()
+                for sheet in datafile.sheet_names:
+                    if re.search(search_pattern, sheet):
+                        matched_sheets[i].append(sheet)
+            elif isinstance(xlxs_sheet_refno_list, list):  # check if a list
+                for j in xlxs_sheet_refno_list:
+                    search_pattern = f"^S_{T-273}C.\({j}\)"
+                    for sheet in datafile.sheet_names:
+                        if re.search(search_pattern, sheet):
+                            matched_sheets[i].append(sheet)
+
+            print(f"Sheets for {T-273}C: ", matched_sheets[i])
+
+            ref_no[i] = []
+            for sheet in matched_sheets[i]:
+                dict[sheet] = pd.read_excel(datafile, sheet)
+                dict[sheet].dropna(subset=["P [MPa]"], inplace=True)
+                ref_no[i].append(sheet[sheet.find("(") + 1 : sheet.find(")")])
+            print(ref_no[i])
+
+            ref_ID[i] = []
+            ref_df = pd.read_excel(reffile, "references")
+            # print(ref_df)
+            for no in ref_no[i]:
+                ref_ID[i].append(ref_df.loc[ref_df["# ref"] == f"[{no}]", "refID"].item())
+                # print(ref_ID[i])
+            print(ref_ID[i])
+        except Exception as e:
+            print("")
+            print("Error - importing exp data failed:")
+            print(e)
+        # print(len(matched_sheets[i]))
+        hasExpData[i] = True if len(matched_sheets[i]) > 0 else False
+    print("hasExpData = ", hasExpData)
+        
+    # Empty array to store results
+    rho_EQ = [None for i in range(len(T_list))]
+    rho_NE = [None for i in range(len(T_list))]
+    
+    # Get pressure range
+    if p_l != None and p_u != None:
+        p_calc = np.linspace(p_l, p_u, no_p_points)  # [Pa]
+    else:
+        for i, T in enumerate(T_list):
+            if hasExpData[i] == True:
+                for j, sheet in enumerate(matched_sheets[i]):
+                    current_max_p_MPa = np.asarray(dict[sheet]["P [MPa]"]).max()
+                    if i == 0 and j == 0:
+                        max_p_MPa = current_max_p_MPa
+                    else:
+                        max_p_MPa = max(current_max_p_MPa, max_p_MPa)
+        
+        max_p = max_p_MPa * 1e6 # [Pa]
+        p_calc = np.linspace(1, max_p, no_p_points)    # [Pa]
+    
+    p_MPa_calc = p_calc * 1e-6  # [MPa]
+    
+    for i, T in enumerate(T_list):
+        # Calculate EQ density
+        rho_EQ[i] = [NE_SAFT.solve_solubility_EQ(T, p_, sol, pol, MW2, return_extended=True)[3] for p_ in p_calc]
+        print("\nDensity_EQ at %s°C: " % (T - 273), rho_EQ[i])
+        
+        # Calculate NE density
+        rho_NE[i] = [NE_SAFT.solve_solubility_NE(T, p_, sol, pol, MW2, ksw_list[i], rho20_list[i], return_extended=True)[3] for p_ in p_calc]
+        print("\nDensity_NE at %s°C and ksw=%g: " % (T - 273, ksw_list[i]), rho_NE[i])
+        
+    # Calculate upper limits of x and y axis
+    x_min, x_max = float('inf'), float('-inf')
+    y_min, y_max = float('inf'), float('-inf')
+    for i, T in enumerate(T_list):
+        for j, sheet in enumerate(matched_sheets[i]):
+            x_min = min(x_min, min(dict[sheet]["P [MPa]"]))
+            x_max = max(x_max, max(dict[sheet]["P [MPa]"]))
+            
+        y_min = min(y_min, min(rho_EQ[i]))
+        y_min = min(y_min, min(rho_NE[i]))
+        y_max = max(y_max, max(rho_EQ[i]))
+        y_max = max(y_max, max(rho_NE[i]))
+
+    # Plotting
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+
+    for i, T in enumerate(T_list):                
+        # EQ calc
+        ax.plot(
+            p_MPa_calc,
+            rho_EQ[i],
+            color=NE_SAFT.custom_colours[i],
+            marker="None",            
+            linestyle="dashed",
+            label=f"EQ model {T-273}°C",
+        )
+
+    # NE solubility    
+        ax.plot(
+            p_MPa_calc,
+            rho_NE[i],
+            color=NE_SAFT.custom_colours[i],
+            marker="None",
+            linestyle="solid",
+            label=f"NE model {T-273}°C",
+        )
+
+    # Labelling
+    ax.set_xlabel(r"p (MPa)")
+    ax.set_ylabel(r"$\rho_{pol}$ ($g \; / \; cm^{-3}$)")
+    ax.set_title(r"%s-%s" % (sol, pol))
+    
+    # Adjust x and y tick to cover all data
+    # Get the length of major ticks on the x-axis
+    x_major_tick_length = ax.get_xticks()[1] - ax.get_xticks()[0]
+    
+    # Get the length of major ticks on the y-axis
+    y_major_tick_length = ax.get_yticks()[1] - ax.get_yticks()[0]
+    
+    # Set adjust x and y tick to cover all data
+    ax.set_xlim(left=0, right=x_max + x_major_tick_length)
+    # ax.set_ylim(bottom=y_min - y_major_tick_length, top=y_max + y_major_tick_length)  # Default
+    ax.set_ylim(bottom=y_min - y_major_tick_length, top=y_max + 2*y_major_tick_length)  # Paper plot 
+
+    # Set ticks to appear inside
+    ax.tick_params(direction="in")
+    
+    # Dynamic column number of legend
+    ax.legend(fontsize='xx-small').set_visible(True)    
+    
+    if save_plot_dir != None:
+        plt.savefig(save_plot_dir, dpi=1200)
+        print(f"Plot saved: {save_plot_dir}")
+        print("")
+        
+    if display_plot == True:
+        plt.show()
+        
 if __name__ == "__main__":
     src_dir = os.path.dirname(__file__)
     src_dir = r"\\?\%s" % src_dir  # extended path (for very long path length)
@@ -388,32 +1027,170 @@ if __name__ == "__main__":
     time_ID = now.strftime("%y%m%d_%H%M")  # YYMMDD_HHMM
     
     # Create new directory to store results
-    result_folder_dir = src_dir 
-    figname = f"CO2_PS_isotherm_{time_ID}.png"
+    result_folder_dir = f'{src_dir}\\Anals\\Paper plots'
+    figname = f"CO2-PMMA_35-51-81C_default_NETGP_RhoPol0PVT_pKsw_{time_ID}.png"
     savedir = result_folder_dir + f"\\{figname}"
     
+    # ksw_base = 0.008293414047454917
     # plot_isotherm_EQvNE(
-        # p_l=1,
-        # p_u=25e6,
-        # no_of_points=40,
-        # T=35+273,
-        # sol="CO2",
-        # pol="PS",
-        # ksw_list=[],
-        # rho20=1.0561,
-        # xlxs_sheet_refno_list=["8"],
-        # display_plot=True,
-        # save_plot_dir=savedir,
+    #     # p_l=1,
+    #     # p_u=25e6,
+    #     no_p_points=10,
+    #     T=35+273,
+    #     sol="CO2",
+    #     pol="PS",
+    #     # ksw_list=[ksw_base*0.90, ksw_base*0.95, ksw_base, ksw_base*1.05, ksw_base*1.10],
+    #     ksw_list=[ksw_base],
+    #     rho20=1.0418247536493246,
+    #     xlxs_sheet_refno_list=["8"],
+    #     display_plot=True,
+    #     # save_plot_dir=savedir,
     # )
     
-    plot_isotherm_EQ(
-        # p_l=1,
-        # p_u=25e6,
-        no_p_points=5,
-        T=100+273,
-        sol="CO2",
-        pol="PS",
-        # xlxs_sheet_refno_list=["8"],
-        display_plot=True,
-        # save_plot_dir=savedir,
-    )
+    # Fit rho20
+    # rho20_f, rho20_AADpc_f = NE_SAFT.fit_rho20_NE(
+    #     T=81+273,
+    #     sol='CO2',
+    #     pol='PS',
+    #     xlxs_sheet_refno='8',
+    #     rho20_x0_list=np.linspace(0.90, 1.30, 30),
+    #     # display_plot=True,
+    #     # save_plot_dir=savedir,
+    # )
+    
+    # rho20_35C = 1/NE_SAFT.get_V20_multiTait(T=35+273, p=0, pol="PMMA")
+    # rho20_51C = 1/NE_SAFT.get_V20_multiTait(T=51+273, p=0, pol="PMMA")
+    # rho20_81C = 1/NE_SAFT.get_V20_multiTait(T=81+273, p=0, pol="PMMA")
+    # rho20_35C = 1.178
+    # rho20_51C = 1.174
+    # rho20_81C = 1.165
+    
+    # Predicted ksw
+    # ksw_35C = NE_SAFT.predict_ksw_NE(T=35+273, sol="CO2", pol="PMMA", rho20=rho20_35C)
+    # ksw_51C = NE_SAFT.predict_ksw_NE(T=51+273, sol="CO2", pol="PMMA", rho20=rho20_51C)
+    # ksw_81C = NE_SAFT.predict_ksw_NE(T=81+273, sol="CO2", pol="PMMA", rho20=rho20_81C)
+    # ksw_35C = 0.0174503
+    # ksw_51C = 0.0138055
+    # ksw_81C = 0.0087252
+    
+    # Fitted ksw
+    # ksw_35C, AADpc_35C = NE_SAFT.fit_ksw_NE(T=35+273, sol="CO2", pol="PMMA", xlxs_sheet_refno="8", rho20=rho20_35C, ksw_x0_list=np.linspace(0.005,0.01,50), display_plot=False)
+    # ksw_51C, AADpc_51C = NE_SAFT.fit_ksw_NE(T=51+273, sol="CO2", pol="PMMA", xlxs_sheet_refno="8", rho20=rho20_51C, ksw_x0_list=np.linspace(0.005,0.01,50), display_plot=False)
+    # ksw_81C, AADpc_81C = NE_SAFT.fit_ksw_NE(T=81+273, sol="CO2", pol="PMMA", xlxs_sheet_refno="8", rho20=rho20_81C, ksw_x0_list=np.linspace(0.005,0.01,50), display_plot=False)
+    # print(f'35°C, rho20 = {rho20_35C}, ksw = {ksw_35C}')
+    # print(f'51°C, rho20 = {rho20_51C}, ksw = {ksw_51C}')
+    # print(f'81°C, rho20 = {rho20_81C}, ksw = {ksw_81C}')
+    
+    # Get AAD for NE
+    # plot_isotherm_EQvNE(
+    #     # p_l=1,
+    #     # p_u=25e6,
+    #     no_p_points=5,
+    #     T=81+273,
+    #     sol="CO2",
+    #     pol="PMMA",
+    #     ksw_list=[0.0087252],
+    #     rho20=rho20_81C,
+    #     xlxs_sheet_refno_list=["8"],
+    #     display_plot=False,
+    #     # save_plot_dir=savedir,
+    # )
+    
+    # plot_isotherm_EQvNE_multiT(
+    #     # p_l=1,
+    #     # p_u=25e6,
+    #     no_p_points=40,
+    #     T_list=[35+273, 51+273, 81+273],
+    #     sol="CO2",
+    #     pol="PMMA",
+    #     rho20_list=[rho20_35C, rho20_51C, rho20_81C],
+    #     ksw_list=[ksw_35C, ksw_51C, ksw_81C],
+    #     xlxs_sheet_refno_list=['8'],
+    #     display_plot=True,
+    #     save_plot_dir=savedir,
+    # )
+    
+    # plot_isotherm_EQ(
+    #     # p_l=1,
+    #     # p_u=25e6,
+    #     no_p_points=40,
+    #     T=35+273,
+    #     sol="CO2",
+    #     pol="PS",
+    #     # xlxs_sheet_refno_list=["4"],
+    #     display_plot=True,
+    #     # save_plot_dir=savedir,
+    # )
+    
+    # plot_isotherm_EQ_multiT(
+    #     # p_l=1,
+    #     # p_u=25e6,
+    #     no_p_points=40,
+    #     T_list=[175+273, 200+273],
+    #     sol="CO2",
+    #     pol="PMMA",
+    #     xlxs_sheet_refno_list=["4"],
+    #     # display_plot=True,
+    #     save_plot_dir=savedir,
+    # )
+    
+    # plot_density_EQvNE_multiT(
+    #     p_l=1,
+    #     p_u=10e6,
+    #     no_p_points=20,
+    #     sol="CO2",
+    #     pol="PS",
+    #     T_list=[35+273, 51+273, 81+273],
+    #     ksw_list=[0.008293414047454917, 0.006648969545681969, 0.004739022681128743],
+    #     rho20_list=[1.0418247536493246, 1.0372232644871846, 1.0297523453933208],    
+    #     xlxs_sheet_refno_list=["8"],
+    #     display_plot=True,
+    #     save_plot_dir=savedir,
+    # )
+    
+    #* Plot for PS with default parameters    
+    # plot_isotherm_EQ_multiT(
+    #     # p_l=1,
+    #     # p_u=25e6,
+    #     no_p_points=40,
+    #     T_list=[35+273, 51+273, 81+273],
+    #     sol="CO2",
+    #     pol="PS",
+    #     xlxs_sheet_refno_list=["8"],
+    #     display_plot=False,
+    #     save_plot_dir=result_folder_dir+f"\\CO2-PS_35-51-81C_default_EoS_{time_ID}.png",
+    # )
+    # plot_isotherm_EQ_multiT(
+    #     # p_l=1,
+    #     # p_u=25e6,
+    #     no_p_points=40,
+    #     T_list=[35+273, 51+273, 81+273],
+    #     sol="CO2",
+    #     pol="PMMA",
+    #     xlxs_sheet_refno_list=["8"],
+    #     display_plot=False,
+    # )
+    
+    #* Plot all exp in references at 35 °C
+    # plot_isotherm_EQvNE_multiT(
+    #     p_l=1,
+    #     p_u=5e6,
+    #     no_p_points=20,   # Default 40
+    #     T_list=[35+273],
+    #     # sol="CO2", pol="PS", rho20_list=[1.042], ksw_list=[0.008294], save_plot_dir=result_folder_dir+f"\\CO2-PS_35C_allRef_optimised_NETGP_RhoPol0PVT_pKsw_zoomed_{time_ID}.png",
+    #     sol="CO2", pol="PMMA", rho20_list=[1.178], ksw_list=[0.018051], save_plot_dir=result_folder_dir+f"\\CO2-PMMA_35C_allRef_optimised_NETGP_RhoPol0PVT_pKsw_zoomed_{time_ID}.png",
+    #     xlxs_sheet_refno_list=None,
+    #     display_plot=True,        
+    # ) 
+    #* Plot common exp data
+    # plot_isotherm_EQ_multiT(
+    #     # p_l=1,
+    #     # p_u=25e6,
+    #     no_p_points=10,
+    #     T_list=[100+273],
+    #     sol="CO2",
+    #     pol="PMMA",
+    #     xlxs_sheet_refno_list=['4','8'],
+    #     display_plot=True,
+    #     save_plot_dir=result_folder_dir+f"\\CO2-PMMA_100C_exp_UshikiVsPanPantoula_{time_ID}.png",        
+    # )

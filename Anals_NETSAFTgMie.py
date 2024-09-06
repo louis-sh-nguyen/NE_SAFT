@@ -987,7 +987,7 @@ def AUTO_plot_isotherm_EQ(solute: str, polymer: str, temp_list: list[float]):
             try:
                 
                 # * Plot EQ for each isotherm
-                parameter_set = "default"
+                parameter_set = "opt_Sato2001"
                 figname = f"{solute}-{polymer}_{Temp-273}C({refno})_isothermEQ_{parameter_set}_{time_ID}.png"
                 savedir = result_folder_dir + f"\\{figname}"
                 
@@ -1010,15 +1010,15 @@ def AUTO_plot_isotherm_EQ(solute: str, polymer: str, temp_list: list[float]):
         
 if __name__ == "__main__":
     CO2_PS_temp_list = [
-        35 + 273,
-        40 + 273,
-        50 + 273,
-        51 + 273,
-        60 + 273,
-        65 + 273,
-        80 + 273,
-        81 + 273,
-        90 + 273,
+        # 35 + 273,
+        # 40 + 273,
+        # 50 + 273,
+        # 51 + 273,
+        # 60 + 273,
+        # 65 + 273,
+        # 80 + 273,
+        # 81 + 273,
+        # 90 + 273,
         100 + 273,
         110 + 273,
         130 + 273,
@@ -1030,24 +1030,24 @@ if __name__ == "__main__":
     ]  # [K]
 
     CO2_PMMA_temp_list = [
-        30 + 273,
-        33 + 273,
-        35 + 273,
-        40 + 273,
-        42 + 273,
-        50 + 273,
-        51 + 273,
-        59 + 273,
-        60 + 273,
-        65 + 273,
-        80 + 273,
-        81 + 273,
         100 + 273,
         125 + 273,
         132 + 273,
         150 + 273,
         175 + 273,
         200 + 273,
+        # 30 + 273,
+        # 33 + 273,
+        # 35 + 273,
+        # 40 + 273,
+        # 42 + 273,
+        # 50 + 273,
+        # 51 + 273,
+        # 59 + 273,
+        # 60 + 273,
+        # 65 + 273,
+        # 80 + 273,
+        # 81 + 273,
     ]  # [K]
 
     CO2_PEMA_temp_list = [
@@ -1064,4 +1064,4 @@ if __name__ == "__main__":
     # rho20PVT_fitksw_predictksw_plotpermisotherm(solute="CO2", polymer="PS", temp_list=[35+273])
     # fitrho20_fitksw_predictksw_plotpermisotherm(solute="CO2", polymer="PS", temp_list=[35+273])
     AUTO_plot_isotherm_EQ(solute="CO2", polymer="PS",temp_list=CO2_PS_temp_list)
-    AUTO_plot_isotherm_EQ(solute="CO2", polymer="PMMA",temp_list=CO2_PMMA_temp_list)
+    # AUTO_plot_isotherm_EQ(solute="CO2", polymer="PMMA",temp_list=CO2_PMMA_temp_list)

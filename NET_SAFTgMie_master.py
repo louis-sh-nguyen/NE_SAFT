@@ -3,6 +3,7 @@ Louis Nguyen
 Department of Cheimcal Engineering, Imperial College London
 sn621@ic.ac.uk
 """
+
 # Turn off numba warning
 import warnings
 from numba.core.errors import NumbaDeprecationWarning, NumbaPendingDeprecationWarning
@@ -72,7 +73,7 @@ custom_colours = [
     "grey",
 ]
 custom_markers = ["o", "x", "^", "*", "s", "D"]
-custom_linestyles = ["solid", "dashed", "dotted", "dashdot"]  # descending priority
+custom_linestyles = ["solid", "dashed", "dotted", "dashdot", (0, (1, 10))]  # descending priority
 
 
 def find_closest(lst, K):
@@ -117,14 +118,14 @@ def get_mixture_info(sol: str, pol: str, MW2: float = None):
         if pol == "PS":
             k_sw_ref = 0.0060  # CO2-PS [MPa^-1]
             n = math.ceil(MW_2 / MW_monomer)  # round up
-            polymer_obj = component(GC={"aCH": 5 * n,"aCCH": 1 * n,"CH2": 1 * n})   #*as-received
-            # polymer_obj = component(GC={"aCH_PS": 5 * n, "aCCH": 1 * n, "CH2": 1 * n})  # *Optimised
-            
+            # polymer_obj = component(GC={"aCH": 5 * n,"aCCH": 1 * n,"CH2": 1 * n})   #* Default
+            polymer_obj = component(GC={"aCH_PS": 5 * n, "aCCH": 1 * n, "CH2": 1 * n})  # *Optimised
+
         elif pol == "PMMA":
             k_sw_ref = 0.027  # CO2-PMMA [MPa^-1]
             n = math.ceil(MW_2 / MW_monomer)  # round up
-            polymer_obj = component(GC={"CH2": 1 * n, "C": 1 * n, "CH3": 2 * n, "COO": 1 * n})  # * as-received
-            # polymer_obj = component(GC={"CH2": 1 * n, "C": 1 * n, "CH3": 2 * n, "COO_PMMA": 1 * n})  # * Optimised            
+            # polymer_obj = component(GC={"CH2": 1 * n, "C": 1 * n, "CH3": 2 * n, "COO": 1 * n})  # * Default
+            polymer_obj = component(GC={"CH2": 1 * n, "C": 1 * n, "CH3": 2 * n, "COO_PMMA": 1 * n})  # * Optimised
 
         elif pol == "PEMA":
             k_sw_ref = 0.0  # CO2-PMMA [MPa^-1]
@@ -149,7 +150,7 @@ def get_mixture_info(sol: str, pol: str, MW2: float = None):
                     "CH3": 1 * n,
                 }
             )
-        # Create Create SAFT-g Mie EOS object of pure polymer
+        # Create SAFT-g Mie EOS object of pure polymer
         polymer_obj.saftgammamie()
         eos_pol = saftgammamie(polymer_obj, compute_critical=False)
 
@@ -247,8 +248,11 @@ def solve_solubility_NE(
         # Converting density from g/cm^3 to mol/m^3
         rhol_0_ = 1e6 * (rho20 / MW2) * 1 / (1 - x_1_)  # dry density [mol-mix/m^3-mix]
 
-        # density-pressure relation
-        rhol_ = rhol_0_ * (1 - ksw * p_MPa)  # adjusted for ksw [mol-mix/m^3-mix]  #*REAL
+        #* density-pressure relation
+        #* OLD relation
+        # rhol_ = rhol_0_ * (1 - ksw * p_MPa)  # [mol-mix/m^3-mix]
+        #* NEW relation  
+        rhol_ = rhol_0_ / (1 + ksw * p_MPa)  # [mol-mix/m^3-mix]        
 
         x_ = hstack([x_1_, 1 - x_1_])  # [mol/mol-mix]
         rho_i_ = x_ * rhol_  # [mol/m^3-mix]
@@ -372,13 +376,14 @@ def solve_solubility_EQ(
         muad_S = eos_mix.muad(rho_i_, T)  # dimensionless [mu/RT]
         return [muad_S[0] - muad_G]
 
-    x0 = linspace(9.90e-1, 9.99e-1, 10)
+    x0 = linspace(9.90e-1, 9.99e-1, 10)   #* Default
+    # x0 = linspace(9.1e-1, 9.99e-1, 10)
     # TODO add x0 finding mechanism
     i = 0
 
     while i < (len(x0)):
         try:
-            solution = fsolve(func, x0=x0[i])
+            solution = fsolve(func, x0=x0[i])            
             residue = func(x_1_=solution)
             residue_float = [float(j) for j in residue]
             if isclose(residue_float, [0.0]).all() == True:
@@ -390,6 +395,9 @@ def solve_solubility_EQ(
                 rhol = eos_mix.density(x, T, p, "L")  # [mol-mix/m^3-mix]
                 rho_2 = rhol * (1 - x_1) * MW2 * 1e-6  # [g-pol/cm^3_mix]
                 V2 = 1 / rho_2  # [cm^3-mix/g-pol]
+                
+                rho_i = x * rhol  # [mol/m^3-mix]
+                muad_S = eos_mix.muad(rho_i, T)  # dimensionless [mu/RT]
 
                 if display_result == True:
                     print("(EQ) Solution found ^-^ " + "\tT=%s°C, p=%g MPa, MW2=%g g/mol" % (T - 273, p * 1e-6, MW2))
@@ -397,7 +405,7 @@ def solve_solubility_EQ(
                 if return_extended == False:
                     return S_1
                 else:
-                    return S_1, x_1, rhol, rho_2, V2
+                    return S_1, x_1, rhol, rho_2, V2, muad_S[0]
             else:
                 i += 1
         except Exception as e:
@@ -413,7 +421,27 @@ def solve_solubility_EQ(
             print("(EQ) No solution found for T=%g°C, p=%g MPa, MW2=%g g/mol" % (T - 273, p * 1e-6, MW2))
             print("")
 
-
+def get_mu_from_x(T: float,
+    p: float,
+    sol: str,
+    pol: str,
+    x_sol: float,  #[mol/mol]
+    MW2: float = None,
+):
+    # get mixture properties
+    eos_mix, eos_sol, MW_1, _MW_2, _MW_monomer, _rho_2_am_dry, _k_sw = get_mixture_info(sol, pol, MW2)
+    MW2 = MW2 if MW2 != None else _MW_2
+    
+    # Calculate chemical potential of external phase from provided solute composition x_sol
+    x = hstack([x_sol, 1 - x_sol])  # [mol/mol-mix]
+    rhol = eos_mix.density(x, T, p, "L")  # [mol-mix/m^3-mix]
+    rho_i = x * rhol  # [mol/m^3-mix]
+    muad_S = eos_mix.muad(rho_i, T)  # dimensionless [mu/RT]
+    mu_S = muad_S * 8.314 * T  # [J/mol]
+    
+    return mu_S[0]
+    
+        
 def get_pol_prop_EQ(T: float, p: float, pol: str, MW2: float = None):
     eos_pol, _MW_2, _MW_monomer, _rho_pol_am = get_mixture_info(sol=None, pol=pol, MW2=MW2)
     MW2 = MW2 if MW2 != None else _MW_2
@@ -1152,7 +1180,7 @@ def fit_ksw_NE(
     if display_plot == True:
         plt.show()
     if save_plot_dir != None:
-        plt.savefig(save_plot_dir, dpi=1200, transparent=True)
+        plt.savefig(save_plot_dir, dpi=1200)
         print(f"Plot saved: {save_plot_dir}")
         print("")
 
@@ -1816,7 +1844,9 @@ def plot_isotherm_EQ_molFraction(
 
     for i, T in enumerate(T_list):
         # calculated EQ solubility (mol fraction)
-        solubility_EQ[i] = [solve_solubility_EQ(T, p_, sol, pol, MW2,return_extended=True)[1] for p_ in p_calc] # [mol/mol]
+        solubility_EQ[i] = [
+            solve_solubility_EQ(T, p_, sol, pol, MW2, return_extended=True)[1] for p_ in p_calc
+        ]  # [mol/mol]
         print("\nsolubility_EQ at %s°C = " % (T - 273), solubility_EQ[i])
 
     # Plotting
@@ -1834,7 +1864,6 @@ def plot_isotherm_EQ_molFraction(
             label=f"EQ model {T-273}°C",
         )
         nlegendcount += 1
-    
 
     # labelling
     ax.set_xlabel(r"p (MPa)")
@@ -1855,6 +1884,7 @@ def plot_isotherm_EQ_molFraction(
         plt.savefig(save_plot_dir, dpi=1200, transparent=True)
         print(f"Plot saved: {save_plot_dir}")
         print("")
+
 
 def plot_isotherm_EQ_rhoL(
     p_l: float,
@@ -1940,7 +1970,9 @@ def plot_isotherm_EQ_rhoL(
 
     for i, T in enumerate(T_list):
         # calculated EQ solubility (mol-mix/m^3-mix)
-        solubility_EQ[i] = [solve_solubility_EQ(T, p_, sol, pol, MW2,return_extended=True)[2] for p_ in p_calc] # [mol/m^3]
+        solubility_EQ[i] = [
+            solve_solubility_EQ(T, p_, sol, pol, MW2, return_extended=True)[2] for p_ in p_calc
+        ]  # [mol/m^3]
         print("\nsolubility_EQ at %s°C = " % (T - 273), solubility_EQ[i])
 
     # Plotting
@@ -1958,7 +1990,6 @@ def plot_isotherm_EQ_rhoL(
             label=f"EQ model {T-273}°C",
         )
         nlegendcount += 1
-    
 
     # labelling
     ax.set_xlabel(r"p (MPa)")
@@ -3258,13 +3289,37 @@ def fit_polPVT_multiTait(xlxs_sheet: str, display_plot: bool = True, save_plot_d
 
         T_C_upper = T_C_unq_list[-1]  # [°C]
         T_C_lower = T_C_unq_list[0]  # [°C]
-        # print(f"T range: {T_C_lower}°C - {T_C_upper}°C")
-        # print("a0 = %.3g cm^3/g" % a0)
-        # print("a1 = %.3g cm^3/g°C" % a1)
-        # print("a2 = %.3g cm^3/g°C^2" % a2)
-        # print("B0 = %.3g MPa" % B0)
-        # print("B1 = %.3g °C^-1" % B1)
-        # print("")
+        
+        print(f"T range: {T_C_lower}°C - {T_C_upper}°C")
+        print("a0 = %.3g cm^3/g" % a0)
+        print("a1 = %.3g cm^3/g°C" % a1)
+        print("a2 = %.3g cm^3/g°C^2" % a2)
+        print("B0 = %.3g MPa" % B0)
+        print("B1 = %.3g °C^-1" % B1)
+        print("")
+        
+        # Temperature values for each pressure
+        T_C = [None for i in range(len(pMPa_unq_list))]
+        for i, p in enumerate(pMPa_unq_list):
+            T_C[i] = df[(df["P (MPa)"] == p)]["T (°C)"].values.tolist()  # [MPa]
+        
+        # V values for each pressure
+        V_exp = [None for i in range(len(pMPa_unq_list))]
+        V_multiTait = [None for i in range(len(pMPa_unq_list))]
+        for i, p in enumerate(pMPa_unq_list):
+            V_exp[i] = df[(df["P (MPa)"] == p)]["V_pol (cm3/g)"].values.tolist()
+            V_multiTait[i] = [V_func((_T_C, p), a0, a1, a2, B0, B1) for _T_C in T_C[i]]
+        # Calculate upper limits of x and y axis
+        x_min, x_max = float('inf'), float('-inf')
+        y_min, y_max = float('inf'), float('-inf')
+        for i, p in enumerate(pMPa_unq_list):
+            x_min = min(x_min, min(T_C[i]))
+            x_max = max(x_max, max(T_C[i]))            
+            y_min = min(y_min, min(V_exp[i] + V_multiTait[i]))
+            y_max = max(y_max, max(V_exp[i] + V_multiTait[i]))
+        
+        title_dict = {'PS_rubbery': 'PS (rubbery)', 'PS_glassy': 'PS (glassy)', 
+                      'PMMA_rubbery': 'PMMA (rubbery)', 'PMMA_glassy': 'PMMA (glassy)'}
         # Plotting
         fig = plt.figure(figsize=(4.8, 3.5))
         ax = fig.add_subplot(111)
@@ -3272,11 +3327,11 @@ def fit_polPVT_multiTait(xlxs_sheet: str, display_plot: bool = True, save_plot_d
 
         for i, p in enumerate(pMPa_unq_list):
             # Multi-Tait model
-            _TC = df[(df["P (MPa)"] == p)]["T (°C)"].values.tolist()  # [MPa]
-            _V_ = [V_func((_T_, p), a0, a1, a2, B0, B1) for _T_ in _TC]
+            # _TC = df[(df["P (MPa)"] == p)]["T (°C)"].values.tolist()  # [MPa]
+            # _V_ = [V_func((_T_, p), a0, a1, a2, B0, B1) for _T_ in _TC]
             ax.plot(
-                _TC,
-                _V_,
+                T_C[i],
+                V_multiTait[i],
                 color="%s" % colours[i],
                 marker="None",
                 linestyle="solid",
@@ -3284,8 +3339,10 @@ def fit_polPVT_multiTait(xlxs_sheet: str, display_plot: bool = True, save_plot_d
             )
             # exp data
             ax.scatter(
-                df[(df["P (MPa)"] == p)]["T (°C)"],
-                df[(df["P (MPa)"] == p)]["V_pol (cm3/g)"],
+                # df[(df["P (MPa)"] == p)]["T (°C)"],
+                T_C[i],
+                # df[(df["P (MPa)"] == p)]["V_pol (cm3/g)"],
+                V_multiTait[i],
                 color="%s" % colours[i],
                 marker="x",
                 linestyle="None",
@@ -3293,15 +3350,28 @@ def fit_polPVT_multiTait(xlxs_sheet: str, display_plot: bool = True, save_plot_d
 
         ax.set_xlabel("T (°C)")
         ax.set_ylabel(r"$\hat{V}_{pol}$ ($cm^{3}/g$)")
-        ax.set_title(xlxs_sheet)
+        ax.set_title(title_dict[xlxs_sheet])
+        
+        # Get the length of major ticks on the x-axis
+        x_major_tick_length = ax.get_xticks()[1] - ax.get_xticks()[0]
+        
+        # Get the length of major ticks on the y-axis
+        y_major_tick_length = ax.get_yticks()[1] - ax.get_yticks()[0]
+        
+        # Set adjust x and y tick to cover all data
+        ax.set_xlim(left=x_min - x_major_tick_length, right=x_max + x_major_tick_length)    # Default
+        ax.set_ylim(bottom=y_min - y_major_tick_length, top=y_max + y_major_tick_length)    # Default
+        # ax.set_xlim(left=x_min - x_major_tick_length, right=x_max + 2*x_major_tick_length)    # For paper
+        # ax.set_ylim(bottom=y_min - y_major_tick_length, top=y_max + y_major_tick_length)    # For paper
+        
         ax.tick_params(direction="in")
         ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left").set_visible(True)
-        if display_plot == True:
-            plt.show()
         if save_plot_dir != None:
-            plt.savefig(save_plot_dir, dpi=1200, transparent=True)
+            plt.savefig(save_plot_dir, dpi=1200)
             print(f"Plot saved: {save_plot_dir}")
             print("")
+        if display_plot == True:
+            plt.show()
 
         return a0, a1, a2, B0, B1, T_C_lower, T_C_upper, df
 
@@ -4189,7 +4259,7 @@ if __name__ == "__main__":
     # print("\n--- Run time:\t%.0f seconds ---\n" % (time.time() - start_time))
 
     # Test get_chi
-    # print(get_chi("PC"))
+    print(get_chi("PMMA"))
 
     # Test get_dVeq_df0
     # frc_arr = [1e-5,1e-4,1e-3,1e-2,1e-1]
@@ -4212,7 +4282,7 @@ if __name__ == "__main__":
     # print(get_chi("PEMA"))
 
     # * Test ksw prediction
-    # ksw_p = predict_ksw_NE(T=35+273, sol="CO2",pol="PMMA", rho20=1.15143271117379)
+    # ksw_p = predict_ksw_NE(T=81+273, sol="CO2", pol="PS", rho20=1.0298)
     # print("ksw_p = ", ksw_p)
 
     # * Test plot_isotherm_multi_ksw
@@ -4281,16 +4351,16 @@ if __name__ == "__main__":
     #     pol="PS",
     #     k_sw=[0.027],
     # )
-    plot_V_isotherm_EQvNE(
-        p_l=1,
-        p_u=20e6,
-        no_of_points=10,
-        T=50 + 273,
-        sol="CO2",
-        pol="HDPE",
-        ksw_list=[],
-        rho20=1.0242,
-    )
+    # plot_V_isotherm_EQvNE(
+    #     p_l=1,
+    #     p_u=20e6,
+    #     no_of_points=10,
+    #     T=50 + 273,
+    #     sol="CO2",
+    #     pol="HDPE",
+    #     ksw_list=[],
+    #     rho20=1.0242,
+    # )
     # plot_dV_V0_isotherm_EQvNE(
     #     p_l=1,
     #     p_u=20e6,
@@ -4324,5 +4394,5 @@ if __name__ == "__main__":
 
     # * fit_multiTait_polPVT
     # fit_polPVT_multiTait("PMMA_glassy")
-    # V20 = get_V20_multiTait(T=60 + 273, p=0, pol="PS")
-    # print(f"rho20 = {1/V20} g/cm^3")
+    V20 = get_V20_multiTait(T=81 + 273, p=0, pol="PS")
+    print(f"rho20 = {1/V20} g/cm^3")
