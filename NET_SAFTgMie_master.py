@@ -75,7 +75,6 @@ custom_colours = [
 custom_markers = ["o", "x", "^", "*", "s", "D"]
 custom_linestyles = ["solid", "dashed", "dotted", "dashdot", (0, (1, 10))]  # descending priority
 
-
 def find_closest(lst, K):
     return lst[min(range(len(lst)), key=lambda i: abs(lst[i] - K))]
 
@@ -84,16 +83,34 @@ def get_mixture_info(sol: str, pol: str, MW2: float = None):
 
     MWmonomer_ref = {
         "PMMA": 100,
+        "PEMA": 114,
+        "PET": 192,
         "PS": 104,
+        "HDPE": 28,
+        "PLA": 72,
+        "PEEK": 288,
     }  # [g/mol]
+    
     MW2_ref = {  # n=1000 repeating units
         "PMMA": 100 * 1000,
+        "PEMA": 114 * 1000,
+        "PET": 192 * 1000,
         "PS": 104 * 1000,
+        "HDPE": 28 * 1000,
+        "PLA": 72 * 1000,
+        "PEEK": 288 * 1000,
     }  # [g/mol]
+    
     rho_pol_am_ref = {
-        "PMMA": 1.181,  # * REAL
+        "PMMA": 1.181,
+        "PEMA": 0.94, 
+        "PET": 1.331,
         "PS": 1.056,  # * REAL
+        "HDPE": 0.94,
+        "PLA": 1.27,
+        "PEEK": 1.30,
     }  # [g-pol-am/cm^3-pol-am]
+    
     if pol != None:
         MW_2 = MW2_ref[pol] if MW2 == None else MW2  # [g/mol]
         MW_monomer = MWmonomer_ref[pol]  # [g/mol]
@@ -110,7 +127,35 @@ def get_mixture_info(sol: str, pol: str, MW2: float = None):
             n = math.ceil(MW_2 / MW_monomer)  # round up
             # polymer_obj = component(GC={"CH2": 1 * n, "C": 1 * n, "CH3": 2 * n, "COO": 1 * n})  # * Default
             polymer_obj = component(GC={"CH2": 1 * n, "C": 1 * n, "CH3": 2 * n, "COO_PMMA": 1 * n})  # * Optimised
+        
+        elif pol == "PEEK":
+            k_sw_ref = 0.00  # CO2-PMMA [MPa^-1]
+            n = math.ceil(MW_2 / MW_monomer)  # round up
+            polymer_obj = component(GC={"aCH": 12 * n, "aCCOaC": 1 * n, "aCOaC": 2 * n})
+            
+        elif pol == "PEMA":
+            k_sw_ref = 0.0  # CO2-PMMA [MPa^-1]
+            n = math.ceil(MW_2 / MW_monomer)  # round up
+            polymer_obj = component(GC={"CH2": 2 * n, "C": 1 * n, "CH3": 2 * n, "COO": 1 * n})
 
+        elif pol == "HDPE":
+            k_sw_ref = 0.00  # unknown
+            n = math.ceil(MW_2 / MW_monomer)  # round up
+            polymer_obj = component(
+                GC={
+                    "CH2": 2 * n,
+                }
+            )
+        elif pol == "PLA":
+            k_sw_ref = 0.00  # unknown
+            n = math.ceil(MW_2 / MW_monomer)  # round up
+            polymer_obj = component(
+                GC={
+                    "COO": 1 * n,
+                    "CH": 1 * n,
+                    "CH3": 1 * n,
+                }
+            )
         # Create SAFT-g Mie EOS object of pure polymer
         polymer_obj.saftgammamie()
         eos_pol = saftgammamie(polymer_obj, compute_critical=False)
@@ -119,6 +164,12 @@ def get_mixture_info(sol: str, pol: str, MW2: float = None):
         MW_1 = MW1_ref[sol]  # [g/mol]
         if sol == "CO2":
             sol_obj = component(GC={"CO2": 1})
+        elif sol == "CH4":
+            sol_obj = component(GC={"CH4": 1})
+        elif sol == "C2H4":
+            sol_obj = component(GC={"CH2": 2})
+        elif sol == "H2O":
+            sol_obj = component(GC={"H2O": 1})
         # Create Create SAFT-g Mie EOS object of pure solute
         sol_obj.saftgammamie()
         eos_sol = saftgammamie(sol_obj)
@@ -4155,7 +4206,6 @@ def plot_pol_Ldensity_isobar_EQ(
             plt.savefig(save_plot_dir, dpi=1200, transparent=True)
             print(f"Plot saved: {save_plot_dir}")
             print("")
-
 
 def plot_pol_Ldenisty_isobar_EQ_MW2sensitivity(MW2_list: list[float], T: float, p_list: list[float], pol: str):
     rho_EQ_calc = [None for i in p_list]
