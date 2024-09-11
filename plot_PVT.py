@@ -186,18 +186,18 @@ if __name__ == "__main__":
     result_folder_dir = f'{src_dir}\\Anals\\Paper plots'
     # figname = f"PS_PVT_default_{time_ID}.png"
     # savedir = result_folder_dir + f"\\{figname}"
-                    
-    # plot_pol_pvt_EosPrediction(pol="PS",
-    #                             pol_state="rubbery",
-    #                             display_plot=False, 
-    #                             save_plot_dir=savedir,
-    #                             )
+    
+    plot_pol_pvt_EosPrediction(pol="PEEK",
+                                pol_state="rubbery",
+                                display_plot=True, 
+                                # save_plot_dir=savedir,
+                                )
 
     # plot_pol_PVT_exp(pol="PS",
     #                  display_plot=True, 
     #                  save_plot_dir=savedir,
     #                  )
     
-    NE_SAFT.fit_polPVT_multiTait(xlxs_sheet='PMMA_rubbery', 
-                                 display_plot=True, 
-                                 save_plot_dir=result_folder_dir + f"\\PMMA_rubbery_multiTait_{time_ID}.png")
+    # NE_SAFT.fit_polPVT_multiTait(xlxs_sheet='PMMA_rubbery', 
+    #                              display_plot=True, 
+    #                              save_plot_dir=result_folder_dir + f"\\PMMA_rubbery_multiTait_{time_ID}.png")

@@ -79,36 +79,20 @@ custom_linestyles = ["solid", "dashed", "dotted", "dashdot", (0, (1, 10))]  # de
 def find_closest(lst, K):
     return lst[min(range(len(lst)), key=lambda i: abs(lst[i] - K))]
 
-
 def get_mixture_info(sol: str, pol: str, MW2: float = None):
     MW1_ref = {"CO2": 44, "CH4": 16, "C2H4": 28, "H2O": 18}  # [g/mol]
 
     MWmonomer_ref = {
         "PMMA": 100,
-        "PEMA": 114,
-        "PET": 192,
         "PS": 104,
-        "HDPE": 28,
-        "PLA": 72,
     }  # [g/mol]
     MW2_ref = {  # n=1000 repeating units
         "PMMA": 100 * 1000,
-        "PEMA": 114 * 1000,
-        "PET": 192 * 1000,
         "PS": 104 * 1000,
-        "HDPE": 28 * 1000,
-        "PLA": 72 * 1000,
     }  # [g/mol]
     rho_pol_am_ref = {
-        # "PMMA": 1.181,  # * REAL
-        "PMMA": 0.94,  # *TEST
-        # "PEMA": 1.124,  #* REAL
-        "PEMA": 0.94,  # *TEST
-        "PET": 1.331,
+        "PMMA": 1.181,  # * REAL
         "PS": 1.056,  # * REAL
-        # "PS": 1.041,  # *TEST
-        "HDPE": 0.94,
-        "PLA": 1.27,
     }  # [g-pol-am/cm^3-pol-am]
     if pol != None:
         MW_2 = MW2_ref[pol] if MW2 == None else MW2  # [g/mol]
@@ -127,29 +111,6 @@ def get_mixture_info(sol: str, pol: str, MW2: float = None):
             # polymer_obj = component(GC={"CH2": 1 * n, "C": 1 * n, "CH3": 2 * n, "COO": 1 * n})  # * Default
             polymer_obj = component(GC={"CH2": 1 * n, "C": 1 * n, "CH3": 2 * n, "COO_PMMA": 1 * n})  # * Optimised
 
-        elif pol == "PEMA":
-            k_sw_ref = 0.0  # CO2-PMMA [MPa^-1]
-            n = math.ceil(MW_2 / MW_monomer)  # round up
-            polymer_obj = component(GC={"CH2": 2 * n, "C": 1 * n, "CH3": 2 * n, "COO": 1 * n})
-
-        elif pol == "HDPE":
-            k_sw_ref = 0.00  # unknown
-            n = math.ceil(MW_2 / MW_monomer)  # round up
-            polymer_obj = component(
-                GC={
-                    "CH2": 2 * n,
-                }
-            )
-        elif pol == "PLA":
-            k_sw_ref = 0.00  # unknown
-            n = math.ceil(MW_2 / MW_monomer)  # round up
-            polymer_obj = component(
-                GC={
-                    "COO": 1 * n,
-                    "CH": 1 * n,
-                    "CH3": 1 * n,
-                }
-            )
         # Create SAFT-g Mie EOS object of pure polymer
         polymer_obj.saftgammamie()
         eos_pol = saftgammamie(polymer_obj, compute_critical=False)
@@ -158,12 +119,6 @@ def get_mixture_info(sol: str, pol: str, MW2: float = None):
         MW_1 = MW1_ref[sol]  # [g/mol]
         if sol == "CO2":
             sol_obj = component(GC={"CO2": 1})
-        elif sol == "CH4":
-            sol_obj = component(GC={"CH4": 1})
-        elif sol == "C2H4":
-            sol_obj = component(GC={"CH2": 2})
-        elif sol == "H2O":
-            sol_obj = component(GC={"H2O": 1})
         # Create Create SAFT-g Mie EOS object of pure solute
         sol_obj.saftgammamie()
         eos_sol = saftgammamie(sol_obj)
@@ -212,31 +167,24 @@ def solve_solubility_NE(
     psat, vlsat, vvsat = eos_sol.psat(T)
     # Saturation Pressure (Pa), saturated liquid volume (m3/mol), saturated vapor volume (m3/mol).
     if p >= psat:  # L phase
-        rho_1 = eos_sol.density(T, p, "L")  # [mol/m^3]
+        state_ext = 'L'
         # print("external phase: liquid")
     else:  # V phase
-        rho_1 = eos_sol.density(T, p, "V")  # [mol/m^3]
+        state_ext = 'V'
         # print("external phase: vapour")
+    
+    rho_ext = eos_sol.density(T, p, state_ext)  # [mol/m^3]
+    # print("rho_1 = ", rho_1)
 
     # Calculate chemical potential of external phase
-    # muad from SL EOS
-    # muad_G_SLEOS = ext.muad_SLEOS("CO2", T, p_MPa)   # SL EOS
-    # muad_G_PCSAFT = ext.muad_PCSAFT("CO2", T, p_MPa)  # PC SAFT
-    # muad from SGTpy
-    muad_G = eos_sol.muad(rho_1, T) / (8.314 * T)  # dimensionless
-    # print("muad_G = ", muad_G)
-
-    # muad_G = mu_G/(8.314*T)  # adimensional
-    # print("T = ",T)
-    # print("P = ",p)
-    # print("muad_G_SAFTgMie :" ,muad_G)
-    # print("muad_G_SLEOS :" ,muad_G_SLEOS)
-    # print("muad_G_PCSAFT :" ,muad_G_PCSAFT)
-    # print("mu_G :" ,muad_G*(8.314 * T))
-    # testing
-    # print("SGTpy = ",muad_G)
-    # print("SLEOS = ",muad_G_SLEOS)
-    # print("PCSAFT = ",muad_G_PCSAFT)
+    muad_ext = eos_sol.muad(rho_ext, T) / (8.314 * T)  # dimensionless
+    
+    # Calculate fugacity of external phase
+    lnFugCoeff_ext = eos_sol.logfug(T, p, state_ext, 1/rho_ext)[0]
+    fugCoeff_ext = exp(lnFugCoeff_ext)
+    fug_ext = fugCoeff_ext * p      # [Pa]
+    fug_ext_MPa = fug_ext * 1e-6    # [MPa]
+    # print("fugacity of external phase = ", fug_ext_MPa)
 
     # NE polymer mixture
     def func(x_1_):
@@ -245,72 +193,59 @@ def solve_solubility_NE(
             x_1_ (_type_): mol_sol/mol_mix
 
         """
+        # Convert mole fraction [mol/mol] to mass fraction [g/g]
+        omg_1_ = (x_1_ * MW_1) / (x_1_ * MW_1 + (1 - x_1_) * MW2)  # [g_sol/g_mix]
+        
         # Converting density from g/cm^3 to mol/m^3
-        rhol_0_ = 1e6 * (rho20 / MW2) * 1 / (1 - x_1_)  # dry density [mol-mix/m^3-mix]
+        rhol_0_ = 1e6 * (rho20 / MW2) * 1 / (1 - x_1_)  # dry density [mol-mix/m^3-mix] #* Default
 
         #* density-pressure relation
-        #* OLD relation
+        #* OLD form
         # rhol_ = rhol_0_ * (1 - ksw * p_MPa)  # [mol-mix/m^3-mix]
-        #* NEW relation  
-        rhol_ = rhol_0_ / (1 + ksw * p_MPa)  # [mol-mix/m^3-mix]        
+        #* OLD form, using fugacity
+        # rhol_ = rhol_0_ * (1 - ksw * fug_ext_MPa)  # [mol-mix/m^3-mix]
+        #* NEW form
+        # rhol_ = rhol_0_ / (1 + ksw * p_MPa)  # [mol-mix/m^3-mix]        
+        #* NEW form, using fugacity, default
+        rhol_ = rhol_0_ / (1 + ksw * fug_ext_MPa)  # [mol-mix/m^3-mix]
 
         x_ = hstack([x_1_, 1 - x_1_])  # [mol/mol-mix]
         rho_i_ = x_ * rhol_  # [mol/m^3-mix]
         muad_S = eos_mix.muad(rho_i_, T)  # adimensional [mu/RT]
 
-        return [muad_S[0] - muad_G]
+        return [muad_S[0] - muad_ext]
 
-    # x0 = linspace(9.90e-1, 9.99e-1, 10)     #*original
-    x0 = linspace(8.00e-1, 9.99e-1, 30)  # *test
+    x0 = linspace(8.00e-1, 9.99e-1, 30)
 
-    # TODO add x0 finding and "remembering" mechanism
     i = 0
     while i < (len(x0)):
         # print("i = ", i)
         try:
             solution = fsolve(func, x0=x0[i], xtol=1e-10)
             residue = func(x_1_=solution)
+            
             # Check return of func() is 0
-            # print("\tsolution = ", solution)
-            # print("\tresidue = ", residue)
             residue_float = [float(i) for i in residue]
             if isclose(residue_float, [0.0]).all() == True:
+                # print('Solution found')
                 x_1 = solution[0]
+                
+                # Check if x_1 is within [0,1]
+                if x_1 < 0 or x_1 > 1:
+                    i += 1
+                    continue
+                
                 x = hstack([x_1, 1 - x_1])  # [mol/mol-mix]
-                # calculate muad_S
-                # print("Forward calculation from rho20")
+                # calculate muad_S                
                 omega_1 = (x_1 * MW_1) / (x_1 * MW_1 + (1 - x_1) * MW2)  # [g_sol/g_mix]
                 _rhol_ = 1e6 * (rho20 / MW2) * 1 / (1 - x_1) * (1 - ksw * p_MPa)
                 _rho_i_ = x * _rhol_
                 muad1 = eos_mix.muad(_rho_i_, T)
 
-                # print("rho_L [mol_mix/m^3_mix] = ", _rhol_)
-                # print("rho_i [mol/m^3_mix] = ", _rho_i_)
-                # print("muad_S =", muad1[0])
-                # print("muad_G = ", muad_G)
-
-                # print("\nBackward calculation from muad_S")
-                # print(
-                #     "rho_L Topliss's method [mol_mix/m^3_mix] = ",
-                #     eos_mix.density(x, T, p, "L"),
-                # )
-                # print(
-                #     "rho_L Newton's method [mol_mix/m^3_mix] = ",
-                #     eos_mix.density(x, T, p, "L", rho0=rho20),
-                # )
-                # print("rho_i [mol/m^3_mix] = ", eos_mix.density(x, T, p, "L") * x)
-
-                # print("x_1 = %g [mol_CO2/mol_mix]" % x_1)
-                # print("rho20 from input [g/cm^3]: ", rho20)
-                # print(
-                #     "rho20 from SAFT [g/cm^3]: ",
-                #     eos_mix.density(x, T, p, "L") * 1e-6 * (1 - x_1) * MW2 / (1 - ksw * p_MPa),
-                # )
-
                 # calculate density
                 rhol_0 = 1e6 * (rho20 / MW2) * 1 / (1 - x_1)  # dry density [mol-mix/m^3-mix]
-                rhol = rhol_0 * (1 - ksw * p_MPa)  # [mol-mix/m^3-mix]
-                rho_2 = rhol * (1 - x_1) * MW2 * 1e-6  # [g-pol/cm^3-mix]
+                rhol_ = rhol_0 / (1 + ksw * fug_ext_MPa)    # [mol-mix/m^3-mix] 
+                rho_2 = rhol_ * (1 - x_1) * MW2 * 1e-6  # [g-pol/cm^3-mix]
                 V2 = 1 / rho_2  # [cm^3-mix/g-pol]
                 S_1 = omega_1 / (1 - omega_1)  # [g-sol/g-pol-am]
 
@@ -323,7 +258,7 @@ def solve_solubility_NE(
                     print("\t(NE) Solubility:\t%g [mol_sol/mol_pol]\t%g [g_sol/g_pol_am]" % ((x_1 / (1 - x_1)), S_1))
 
                 if return_extended == False:
-                    return S_1  # TODO change S_1 to omg1_omg2
+                    return S_1  
                 else:
                     return S_1, omega_1, muad1, rho_2, V2
             else:
@@ -341,7 +276,6 @@ def solve_solubility_NE(
             print("(NE) No solution found for T=%s°C,MW2=%g, ksw=%g, p=%g MPa" % (T - 273, MW2, ksw, p * 1e-6))
             print("")
 
-
 def solve_solubility_EQ(
     T: float,
     p: float,
@@ -351,7 +285,6 @@ def solve_solubility_EQ(
     display_result: bool = False,
     return_extended: bool = False,
 ):
-    p_MPa = p * 1e-6  # [MPa]
 
     # get mixture properties
     eos_mix, eos_sol, MW_1, _MW_2, _MW_monomer, _rho_2_am_dry, _k_sw = get_mixture_info(sol, pol, MW2)
@@ -383,7 +316,7 @@ def solve_solubility_EQ(
 
     while i < (len(x0)):
         try:
-            solution = fsolve(func, x0=x0[i])            
+            solution = fsolve(func, x0=x0[i], xtol= 1e-10)            
             residue = func(x_1_=solution)
             residue_float = [float(j) for j in residue]
             if isclose(residue_float, [0.0]).all() == True:
@@ -420,6 +353,7 @@ def solve_solubility_EQ(
         if display_result == True:
             print("(EQ) No solution found for T=%g°C, p=%g MPa, MW2=%g g/mol" % (T - 273, p * 1e-6, MW2))
             print("")
+
 
 def get_mu_from_x(T: float,
     p: float,
@@ -1000,7 +934,6 @@ def get_fitting_AAD(Y_exp: list[float], Y_calc: list[float]) -> float:  # TODO u
     AAD = AAD_cumulative / n
     return AAD
 
-
 def fit_ksw_NE(
     T: float,
     sol: str,
@@ -1112,12 +1045,6 @@ def fit_ksw_NE(
 
     # Fitting error
     solubility_calc_evaluation = ksw_fitting_func(p_exp, ksw_f)
-    try:
-        AAD_percent = get_fitting_AAD(solubility_exp, solubility_calc_evaluation) * 100  # [%]
-    except:
-        AAD_percent = 0
-    print("Fitting error: AAD%% = %.1f%%" % (AAD_percent))
-    print("")
 
     # Calculate solubility from new ksw
     p_MPa_full = asarray(df["P [MPa]"])
@@ -1156,7 +1083,7 @@ def fit_ksw_NE(
         color=calc_style["color"],
         marker=calc_style["marker"],
         linestyle=calc_style["linestyle"],
-        label=r"NE $k_{sw} = %.3g \, MPa^{-1}$ (AAD%%=%.1f%%)" % (ksw_f, AAD_percent),
+        label=r"NE $k_{sw} = %.3g$" % (ksw_f),
     )
     # labelling
     ax.set_xlabel(r"p (MPa)")
@@ -1184,8 +1111,7 @@ def fit_ksw_NE(
         print(f"Plot saved: {save_plot_dir}")
         print("")
 
-    return ksw_f[0], AAD_percent
-
+    return ksw_f[0]
 
 def fit_rho20_NE(
     T: float,
@@ -1366,16 +1292,15 @@ def fit_rho20_NE(
         print("")
     return rho20_f[0], AAD_percent
 
-
 def plot_isotherm_EQvNE(
-    p_l: float,
-    p_u: float,
-    no_of_points: int,
     T: float,
+    ksw_list: list[float],
+    rho20: float,
     sol: str,
     pol: str,
-    ksw_list: list[float],
-    rho20: float = None,
+    p_l: float = None,
+    p_u: float = None,
+    no_p_points: int = 20,
     MW2: float = None,
     xlxs_sheet_refno_list: list[str] = None,
     display_plot: bool = True,
@@ -1436,16 +1361,38 @@ def plot_isotherm_EQvNE(
 
     hasExpData = True if len(matched_sheets) > 0 else False
 
-    # calculating solubility
-    p_calc = linspace(p_l, p_u, no_of_points)  # [Pa]
+    # Create empty placeholders, return None in case calculation fails
+    p_MPa_exp_list = [None for i in range(len(matched_sheets))]
+    solubility_exp_list = [None for i in range(len(matched_sheets))]  
+    
+    # Importing exp data
+    if hasExpData == True:
+        for i, sheet in enumerate(matched_sheets):
+            p_MPa_exp_list[i] = asarray(dict[sheet]["P [MPa]"])
+            solubility_exp_list[i] = asarray(dict[sheet]["Solubility [g-sol/g-pol-am]"])
+    
+    # Get pressure range
+    if p_l != None and p_u != None:
+        p_calc = linspace(p_l, p_u, no_p_points)  # [Pa]
+    else:
+        if hasExpData == True:
+            for i, sheet in enumerate(matched_sheets):
+                current_max_p_MPa = p_MPa_exp_list[i].max()
+                if i == 0:
+                    max_p_MPa = current_max_p_MPa
+                else:
+                    max_p_MPa = max(current_max_p_MPa, max_p_MPa)
+        
+        max_p = max_p_MPa * 1e6  # [Pa]
+        p_calc = linspace(1, max_p, no_p_points)    # [Pa]
+        
     p_MPa_calc = p_calc * 1e-6
+    print("p_cal = ", p_calc)
 
     # Create empty placeholders, return None in case calculation fails
     solubility_NE_calc_list = [None for i in range(len(ksw_list))]
     p_MPa_exp_list = [None for i in range(len(matched_sheets))]
     solubility_exp_list = [None for i in range(len(matched_sheets))]
-    solubility_calc_evaluation_NE_list = [None for i in range(len(ksw_list))]
-    AAD_percent_NE = [None for i in range(len(ksw_list))]
     label_NE = [None for i in range(len(ksw_list))]
     print("p_cal = ", p_calc)
     # calculated NE solubility for each ksw
@@ -1455,7 +1402,7 @@ def plot_isotherm_EQvNE(
             "solubility at ksw=%g =\t" % ksw_list[i], solubility_NE_calc_list[i]
         )  # calculated NE solubility with ksw != 0
 
-    # calculated EQ solubility
+    #* Calculate EQ solubility
     solubility_EQ_list = [solve_solubility_EQ(T, p_, sol, pol, MW2) for p_ in p_calc]
     print("\nsolubility_EQ = ", solubility_EQ_list)
 
@@ -1468,30 +1415,7 @@ def plot_isotherm_EQvNE(
         for i, sheet in enumerate(matched_sheets):
             p_MPa_exp_list[i] = asarray(dict[sheet]["P [MPa]"])
             solubility_exp_list[i] = asarray(dict[sheet]["Solubility [g-sol/g-pol-am]"])
-        # calculate AAD for NE and EQ when there is only 1 exp data sheet
-        if len(matched_sheets) == 1:
-            p_exp_list = p_MPa_exp_list[0] * 1e6  # [Pa]
-            sol_exp_list = solubility_exp_list[0]
-            solubility_calc_evaluation_EQ = [solve_solubility_EQ(T, p_, sol, pol, MW2) for p_ in p_exp_list]
-            try:
-                AAD_percent_EQ = get_fitting_AAD(sol_exp_list, solubility_calc_evaluation_EQ) * 100  # [%]
-            except:
-                AAD_percent_EQ = 0
-            print("AAD%% for EQ: AAD%% = %.1f%%" % (AAD_percent_EQ))
-            label_EQ += " (AAD%%=%.1f%%)" % AAD_percent_EQ
-            for i, ksw_ in enumerate(ksw_list):
-                solubility_calc_evaluation_NE_list[i] = [
-                    solve_solubility_NE(T, _p_, sol, pol, MW2, ksw_list[i], rho20) for _p_ in p_exp_list
-                ]
-                try:
-                    AAD_percent_NE[i] = (
-                        get_fitting_AAD(sol_exp_list, solubility_calc_evaluation_NE_list[i]) * 100
-                    )  # [%]
-                except:
-                    AAD_percent_NE[i] = 0
-                print("AAD%% for NE ksw=%g: AAD%% = %.1f%%" % (ksw_, AAD_percent_NE[i]))
-                label_NE[i] += " (AAD%%=%.1f%%)" % AAD_percent_NE[i]
-
+    
     # Plotting
     fig = plt.figure()
     ax = fig.add_subplot(111)
@@ -1509,7 +1433,7 @@ def plot_isotherm_EQvNE(
                 label=f"exp: {ref_ID[i]} ({ref_no[i]})",
             )
 
-    # EQ solubility
+    #* EQ solubility
     ax.plot(
         p_MPa_calc,
         solubility_EQ_list,
@@ -1531,30 +1455,20 @@ def plot_isotherm_EQvNE(
         )
     # labelling
     ax.set_xlabel(r"p (MPa)")
-    ax.set_ylabel(r"Solubility ($g_{sol} / g_{pol\:am}$)")
+    ax.set_ylabel(r"Solubility ($g_{sol} / g_{pol}$)")
     ax.set_title("%s-%s at %.0f°C " % (sol, pol, T - 273))
-    ax.annotate(
-        r"NE $\rho_{20}$ = %.4f $g/cm^{-3}$" % rho20,
-        xy=(1.0, -0.09),
-        xycoords="axes fraction",
-        ha="right",
-        va="center",
-        fontsize="xx-small",
-    )
-    # styling
-    ax.set_xlim(left=0)
-    ax.set_ylim(bottom=0)
-    # ax.grid(visible=True)
+        
+    # Set ticks to appear inside
     ax.tick_params(direction="in")
     legend_ncol = 1 if (len(matched_sheets) + len(ksw_list)) < 5 else 2
     ax.legend(ncol=legend_ncol).set_visible(True)
-    if display_plot == True:
-        plt.show()
+    
     if save_plot_dir != None:
-        plt.savefig(save_plot_dir, dpi=1200, transparent=True)
+        plt.savefig(save_plot_dir, dpi=1200)
         print(f"Plot saved: {save_plot_dir}")
         print("")
-
+    if display_plot == True:
+        plt.show()
 
 def plot_isobar_EQvsNE(
     T_l: float,
@@ -3449,7 +3363,6 @@ def get_chi(pol: str):
         chi = chi
     return chi
 
-
 def get_dV2eq_df0(T: float, sol: str, pol: str, p0=10, MW2: float = None, frc_step: float = 1e-4):
     """approximate by dVeq_dp at p=0 as f~p.
 
@@ -3467,26 +3380,46 @@ def get_dV2eq_df0(T: float, sol: str, pol: str, p0=10, MW2: float = None, frc_st
     # get mixture properties
     eos_mix, eos_sol, MW_1, _MW_2, _MW_monomer, rho_2_am_dry, _k_sw = get_mixture_info(sol, pol, MW2)
     MW2 = MW2 if MW2 != None else _MW_2
+    
+    def get_fug_sol(temp, pressure):
+        # Saturation Pressure (Pa), saturated liquid volume (m3/mol), saturated vapor volume (m3/mol).
+        psat, vlsat, vvsat = eos_sol.psat(temp)
+        
+        if pressure >= psat:  # L phase
+            state_ext = 'L'
+        else:  # V phase
+            state_ext = 'V'
 
-    def get_V2eq(_p_):  # with penetrant presence
-        S_gg, x1, rhol = solve_solubility_EQ(T, _p_, sol, pol, MW2, return_extended=True)[:3]
+        rho_sol = eos_sol.density(temp, pressure, state_ext)  # [mol/m^3]
+        lnFugCoeff_sol = eos_sol.logfug(temp, pressure, state_ext, 1/rho_sol)[0]
+        fugCoeff_sol = exp(lnFugCoeff_sol)
+        fug_sol = fugCoeff_sol * pressure      # [Pa]
+        
+        return fug_sol
+        
+    def get_V2eq(_p):  # with penetrant presence
+        S_gg, x1, rhol = solve_solubility_EQ(T, _p, sol, pol, MW2, return_extended=True)[:3]
         rho_eq = rhol * (x1 * MW_1 + (1 - x1) * MW2) * 1e-6  # [g_mix/cm^3_mix]
         rho2_eq = rho_eq * (1 - S_gg / (S_gg + 1))  # [g_pol/cm^3_mix]
-        V2_eq = 1 / rho2_eq  # [cm^3_mix/g_mix]
+        V2_eq = 1 / rho2_eq  # [cm^3_mix/g_mix]   #* Default
+        # V2_eq = 1 / rho_eq  # [cm^3_mix/g_mix]     #* Test
         return V2_eq
 
-    def fx(_p0_):
+    def fx(_p0_): #dVeq/df
         p_l = _p0_ * (1 - frc_step)  # [Pa]
         p_u = _p0_ * (1 + frc_step)  # [Pa]
+        f_l = get_fug_sol(T, p_l)  # [Pa]
+        f_u = get_fug_sol(T, p_u)  # [Pa]
         V2eq_l = get_V2eq(p_l)  # [cm^3/g]
         V2eq_u = get_V2eq(p_u)  # [cm^3/g]
-        return (V2eq_u - V2eq_l) / (p_u - p_l)
+        return (V2eq_u - V2eq_l) / (f_u - f_l)
 
-    p0_list = arange(1, 5, 1)  # [Pa]
-    dV2eq_dp = [fx(_p0_) for _p0_ in p0_list]
-    dV2eq_dp_ave = average(dV2eq_dp)
+    p0_list = arange(1, 5, 1)  # [Pa]   #* Default
+    # p0_list = arange(1e-3, 5e-3, 1e-3)  # [Pa]   #* Test
+    dV2eq_df = [fx(_p0_) for _p0_ in p0_list]    
+    dV2eq_dp_ave = average(dV2eq_df)
     isclose_checker = all(
-        [isclose(x, dV2eq_dp_ave, dV2eq_dp_ave * 0.05) for x in dV2eq_dp]
+        [isclose(x, dV2eq_dp_ave, dV2eq_dp_ave * 0.05) for x in dV2eq_df]
     )  # 5% tolerance arounge average
 
     if isclose_checker == True:
@@ -3495,8 +3428,154 @@ def get_dV2eq_df0(T: float, sol: str, pol: str, p0=10, MW2: float = None, frc_st
         print("Error: dV2eq_dp_ave numerical result unsatisfactory")
         return None
 
+def get_dlnrho2eq_df0(T: float, sol: str, pol: str, p0=10, MW2: float = None, frc_step: float = 1e-4):
+    """approximate by drho2eq_dp at p=0 as f~p.
 
-def predict_ksw_NE(
+    Args:
+        T (_type_): _description_
+        sol (_type_): _description_
+        pol (_type_): _description_
+        p0 (int, optional): _description_. Defaults to 10.
+        MW_2 (_type_, optional): _description_. Defaults to None.
+        frc_step (_type_, optional): _description_. Defaults to 1e-3.
+
+    Returns:
+        _type_: _description_
+    """
+    # get mixture properties
+    eos_mix, eos_sol, MW_1, _MW_2, _MW_monomer, rho_2_am_dry, _k_sw = get_mixture_info(sol, pol, MW2)
+    eos_pol = get_mixture_info(sol=None, pol=pol)[0]    
+    MW2 = MW2 if MW2 != None else _MW_2
+    
+    # Get rho_pol0_EQ
+    rho_pol0_EQ = eos_pol.density(T, 1e-5, 'L')    # [mol/m^3]
+    rho_pol0_EQ = rho_pol0_EQ * MW2 *1e-6       # [g/cm^3]
+    
+    def get_fug_sol(temp, pressure):
+        # Saturation Pressure (Pa), saturated liquid volume (m3/mol), saturated vapor volume (m3/mol).
+        psat, vlsat, vvsat = eos_sol.psat(temp)
+        
+        if pressure >= psat:  # L phase
+            state_ext = 'L'
+        else:  # V phase
+            state_ext = 'V'
+
+        rho_sol = eos_sol.density(temp, pressure, state_ext)  # [mol/m^3]
+        lnFugCoeff_sol = eos_sol.logfug(temp, pressure, state_ext, 1/rho_sol)[0]
+        fugCoeff_sol = exp(lnFugCoeff_sol)
+        fug_sol = fugCoeff_sol * pressure      # [Pa]
+        
+        return fug_sol
+        
+    def get_rho2eq(_p):  # with penetrant presence
+        S_gg, x1, rhol = solve_solubility_EQ(T, _p, sol, pol, MW2, return_extended=True)[:3]
+        rho_eq = rhol * (x1 * MW_1 + (1 - x1) * MW2) * 1e-6  # [g_mix/cm^3_mix]
+        rho2_eq = rho_eq * (1 - S_gg / (S_gg + 1))  # [g_pol/cm^3_mix]
+        return rho2_eq
+
+    def fx(_p0_, step=frc_step): #dlnrho2eq/df
+        p_l = _p0_ * (1 - step)  # [Pa]
+        p_u = _p0_ * (1 + step)  # [Pa]
+        f_l = get_fug_sol(T, p_l)  # [Pa]
+        f_u = get_fug_sol(T, p_u)  # [Pa]
+        rho2eq_l = get_rho2eq(p_l)  # [g/cm^3]
+        rho2eq_u = get_rho2eq(p_u)  # [g/cm^3]
+        lnrho2eq_l = log(rho2eq_l)  # [g/cm^3]
+        lnrho2eq_u = log(rho2eq_u)  # [g/cm^3]
+        return (lnrho2eq_u - lnrho2eq_l) / (f_u - f_l)  #* Default 
+        # return (lnrho2eq_u - log(rho_pol0_EQ)) / (f_u)  #* Test
+
+    p0_list = arange(1, 5, 1)  # [Pa]   #* Default
+    # p0_list = arange(0.04, 0.05, 0.002)  # [Pa]   #* Test
+    dlnrho2eq_df = [fx(_p0_, step=1e-7) for _p0_ in p0_list]
+    dlnrho2eq_df_ave = average(dlnrho2eq_df)
+    isclose_checker = all(
+        [isclose(x, dlnrho2eq_df, rtol=0.05) for x in dlnrho2eq_df]
+    )  # 5% tolerance arounge average
+
+    if isclose_checker == True:
+        return dlnrho2eq_df_ave
+    else:
+        print("Error: drho2eq_dp_ave numerical result is unsatisfactory")
+        return None
+
+def get_dV2eq_df(T: float, p: float, sol: str, pol: str, MW2: float = None, frc_step: float = 1e-4):
+    """approximate by dVeq_dp at p=0 as f~p.
+
+    Args:
+        T (_type_): _description_
+        sol (_type_): _description_
+        pol (_type_): _description_
+        p0 (int, optional): _description_. Defaults to 10.
+        MW_2 (_type_, optional): _description_. Defaults to None.
+        frc_step (_type_, optional): _description_. Defaults to 1e-3.
+
+    Returns:
+        _type_: _description_
+    """
+    # get mixture properties
+    eos_mix, eos_sol, MW_1, _MW_2, _MW_monomer, rho_2_am_dry, _k_sw = get_mixture_info(sol, pol, MW2)
+    eos_pol = get_mixture_info(sol=None, pol=pol)[0]    
+    MW2 = MW2 if MW2 != None else _MW_2
+    
+    # Get rho_pol0_EQ
+    rho_pol0_EQ = eos_pol.density(T, 1e-5, 'L') * MW2 *1e-6    # [g/cm^3]
+    V_pol0_EQ = 1 / rho_pol0_EQ     # [cm^3/g]
+    
+    def get_fug_sol(temp, pressure):
+        # Saturation Pressure (Pa), saturated liquid volume (m3/mol), saturated vapor volume (m3/mol).
+        psat, vlsat, vvsat = eos_sol.psat(temp)
+        
+        if pressure >= psat:  # L phase
+            state_ext = 'L'
+        else:  # V phase
+            state_ext = 'V'
+
+        rho_sol = eos_sol.density(temp, pressure, state_ext)  # [mol/m^3]
+        lnFugCoeff_sol = eos_sol.logfug(temp, pressure, state_ext, 1/rho_sol)[0]
+        fugCoeff_sol = exp(lnFugCoeff_sol)
+        fug_sol = fugCoeff_sol * pressure      # [Pa]
+        
+        return fug_sol
+        
+    def get_V2eq(_p):  # with penetrant presence
+        S_gg, x1, rhol = solve_solubility_EQ(T, _p, sol, pol, MW2, return_extended=True)[:3]
+        rho_eq = rhol * (x1 * MW_1 + (1 - x1) * MW2) * 1e-6  # [g_mix/cm^3_mix]
+        rho2_eq = rho_eq * (1 - S_gg / (S_gg + 1))  # [g_pol/cm^3_mix]
+        V_eq = 1 / rho_eq  # [cm^3_mix/g_mix]
+        V2_eq = 1 / rho2_eq  # [cm^3_mix/g_pol]
+        return V2_eq    #* Default
+        # return V_eq    #* Test
+
+    def fx(_p0_): #dVeq/df
+        p_l = _p0_ * (1 - frc_step)  # [Pa]
+        p_u = _p0_ * (1 + frc_step)  # [Pa]
+        f = get_fug_sol(T, _p0_)  # [Pa]
+        f_l = get_fug_sol(T, p_l)  # [Pa]
+        f_u = get_fug_sol(T, p_u)  # [Pa]
+        V2eq_l = get_V2eq(p_l)  # [cm^3/g]
+        V2eq_u = get_V2eq(p_u)  # [cm^3/g]
+        return (V2eq_u - V2eq_l) / (f_u - f_l)  #* Default
+        # return (V2eq_u - V_pol0_EQ) / (f_u)  #* Test
+
+    if p < 10:
+        p_list = arange(1, 5, 1)    # [Pa]
+    else:
+        p_list = arange(p-2, p+2, 1)  # [Pa]
+        
+    dV2eq_df = [fx(_p) for _p in p_list]    
+    dV2eq_dp_ave = average(dV2eq_df)
+    isclose_checker = all(
+        [isclose(x, dV2eq_dp_ave, rtol=0.005) for x in dV2eq_df]
+    )  # 5% tolerance arounge average
+
+    if isclose_checker == True:
+        return dV2eq_dp_ave
+    else:
+        print("Error: dV2eq_dp_ave numerical result unsatisfactory")
+        return None
+
+def predict_ksw_NE_default(
     T: float,
     sol: str,
     pol: str,
@@ -3516,6 +3595,7 @@ def predict_ksw_NE(
 
     # Step 3: dV2eq_df0 numercial result
     dV2eq_df0 = get_dV2eq_df0(T, sol, pol, MW2=MW2)
+    
     # Step 4: ksw
     ksw_Pa = chi / V_pol0 * dV2eq_df0  # [Pa^-1]
     ksw_MPa = ksw_Pa * 1e6  # [MPa^-1]
@@ -3524,7 +3604,70 @@ def predict_ksw_NE(
     if unit == "Pa^-1":
         return ksw_Pa
 
+def predict_ksw_NE_alt1(
+    T: float,
+    sol: str,
+    pol: str,
+    rho20: float = None,
+    MW2: float = None,
+    unit: str = "MPa^-1",
+) -> float:
+    eos_pol, _MW_2, _MW_monomer, rho_pol_am = get_mixture_info(sol=None, pol=pol)
+    rho20 = rho20 if rho20 != None else rho_pol_am
+    MW2 = MW2 if MW2 != None else _MW_2
 
+    # Step 1: rho_pol_0
+    rho_pol0 = rho20  # [g/cm^3]
+
+    # Step 2: chi
+    chi = get_chi(pol)  # [adim]
+    
+    # Step 3: rho_pol0_EQ
+    rho_pol0_EQ = eos_pol.density(T, 1, 'L')    # [mol/m^3]
+    rho_pol0_EQ = rho_pol0_EQ * MW2 *1e-6       # [g/cm^3]
+
+    # Step 4: dVlnrhoeq_df0 numercial result
+    dlnrho2eq_df0 = get_dlnrho2eq_df0(T, sol, pol, MW2=MW2)
+    
+    # Step 5: ksw
+    ksw_Pa = - chi * rho_pol0 / rho_pol0_EQ * dlnrho2eq_df0  # [Pa^-1]
+    ksw_MPa = ksw_Pa * 1e6  # [MPa^-1]
+    
+    if unit == "MPa^-1":
+        return ksw_MPa
+    if unit == "Pa^-1":
+        return ksw_Pa
+
+def predict_ksw_NE_alt2(
+    T: float,
+    p: float,
+    sol: str,
+    pol: str,
+    rho20: float = None,
+    MW2: float = None,
+    unit: str = "MPa^-1",
+) -> float:
+    eos_pol, _MW_2, _MW_monomer, rho_pol_am = get_mixture_info(sol=None, pol=pol)
+    rho20 = rho20 if rho20 != None else rho_pol_am
+    MW2 = MW2 if MW2 != None else _MW_2
+
+    # Step 1: rho_pol_0
+    V_pol0 = 1 / rho20  # [cm^3/g]
+
+    # Step 2: chi
+    chi = get_chi(pol)  # [adim]
+
+    # Step 3: dV2eq_df0 numercial result
+    dV2eq_df0 = get_dV2eq_df(T, p, sol, pol, MW2=MW2)
+    
+    # Step 4: ksw
+    ksw_Pa = chi / V_pol0 * dV2eq_df0  # [Pa^-1]
+    ksw_MPa = ksw_Pa * 1e6  # [MPa^-1]
+    if unit == "MPa^-1":
+        return ksw_MPa
+    if unit == "Pa^-1":
+        return ksw_Pa
+    
 def plot_ksw_parity(
     xlxs_sheet: str,
     sol_list: list[str] = None,
@@ -4259,7 +4402,7 @@ if __name__ == "__main__":
     # print("\n--- Run time:\t%.0f seconds ---\n" % (time.time() - start_time))
 
     # Test get_chi
-    print(get_chi("PMMA"))
+    # print(get_chi("PMMA"))
 
     # Test get_dVeq_df0
     # frc_arr = [1e-5,1e-4,1e-3,1e-2,1e-1]
@@ -4394,5 +4537,13 @@ if __name__ == "__main__":
 
     # * fit_multiTait_polPVT
     # fit_polPVT_multiTait("PMMA_glassy")
-    V20 = get_V20_multiTait(T=81 + 273, p=0, pol="PS")
-    print(f"rho20 = {1/V20} g/cm^3")
+    # V20 = get_V20_multiTait(T=81 + 273, p=0, pol="PS")
+    # print(f"rho20 = {1/V20} g/cm^3")
+
+    #* ksw prediction methods
+    ksw_old = predict_ksw_NE_default(T=35+273, sol="CO2", pol="PS", rho20=1.042)
+    print(f'ksw default = {ksw_old} MPa^-1')
+    ksw_test = predict_ksw_NE_alt1(T=35+273, sol="CO2", pol="PS", rho20=1.042)
+    print(f'ksw alt1 = {ksw_test} MPa^-1')
+    ksw_new = predict_ksw_NE_alt2(T=35+273, p=1, sol="CO2", pol="PS", rho20=1.042)
+    print(f'ksw alt2 = {ksw_new} MPa^-1')
