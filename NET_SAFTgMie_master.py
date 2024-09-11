@@ -105,7 +105,7 @@ def get_mixture_info(sol: str, pol: str, MW2: float = None):
         "PMMA": 1.181,
         "PEMA": 0.94, 
         "PET": 1.331,
-        "PS": 1.056,  # * REAL
+        "PS": 1.056,
         "HDPE": 0.94,
         "PLA": 1.27,
         "PEEK": 1.30,
@@ -361,7 +361,6 @@ def solve_solubility_EQ(
         return [muad_S[0] - muad_G]
 
     x0 = linspace(9.90e-1, 9.99e-1, 10)   #* Default
-    # x0 = linspace(9.1e-1, 9.99e-1, 10)
     # TODO add x0 finding mechanism
     i = 0
 
@@ -372,6 +371,12 @@ def solve_solubility_EQ(
             residue_float = [float(j) for j in residue]
             if isclose(residue_float, [0.0]).all() == True:
                 x_1 = solution[0]  # [mol-sol/mol-mix]
+                
+                # Check if x_1 is within [0,1]
+                if x_1 < 0 or x_1 > 1:
+                    i += 1
+                    continue
+                                   
                 omega_1 = (x_1 * MW_1) / (x_1 * MW_1 + (1 - x_1) * MW2)
                 S_1 = omega_1 / (1 - omega_1)  # [g-sol/g-pol-am]
 
