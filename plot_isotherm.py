@@ -2,10 +2,10 @@ import math
 import os
 import time
 from datetime import datetime
+import matplotlib
 import matplotlib.pyplot as plt
 import pandas as pd
-# import NET_SAFTgMie_master as NE_SAFT
-import _TEST_NET_SAFTgMie as NE_SAFT
+import NET_SAFTgMie_master as NE_SAFT
 import numpy as np
 import re
 import logging
@@ -16,6 +16,59 @@ import warnings
 from numba.core.errors import NumbaDeprecationWarning, NumbaPendingDeprecationWarning
 warnings.filterwarnings("ignore")
 import addcopyfighandler
+
+matplotlib.rcParams["figure.figsize"] = [4.0, 3.5]  # in inches
+matplotlib.rcParams["mathtext.default"] = "regular"  # same as regular text
+matplotlib.rcParams["font.family"] = "DejaVu Sans"  # alternative: "serif"
+matplotlib.rcParams["font.size"] = 10.0
+matplotlib.rcParams["axes.titlesize"] = "small"  # relative to font.size
+matplotlib.rcParams["axes.labelsize"] = "small"  # relative to font.size
+matplotlib.rcParams["xtick.labelsize"] = "x-small"  # relative to font.size
+matplotlib.rcParams["ytick.labelsize"] = "x-small"  # relative to font.size
+matplotlib.rcParams["legend.fontsize"] = "xx-small"  # relative to font.size
+matplotlib.rcParams["legend.frameon"] = False
+matplotlib.rcParams["grid.linestyle"] = "-."
+matplotlib.rcParams["grid.linewidth"] = 0.15  # in point units
+matplotlib.rcParams["figure.autolayout"] = True
+
+def update_subplot_ticks(ax, x_lo=None, y_lo=None, x_up=None, y_up=None):
+    """Update x and y ticks of subplot ax to cover all data. Put ticks to inside.
+
+    Args:
+        ax: plot object.
+    """
+    # Adjust lower x and y ticks to start from 0
+    if x_lo != None:
+        ax.set_xlim(left=x_lo)
+    if y_lo != None:
+        ax.set_ylim(bottom=y_lo)
+    if x_up != None:
+        ax.set_xlim(right=x_up)
+    if y_up != None:
+        ax.set_ylim(top=y_up)
+    
+    # Get the largest and smallest x ticks and y ticks
+    max_y_tick = max(ax.get_yticks())
+    max_x_tick = max(ax.get_xticks())
+    min_y_tick = min(ax.get_yticks())
+    min_x_tick = min(ax.get_xticks())
+    
+    # Get the length of major ticks on the x-axis
+    ax_x_major_tick_length = ax.get_xticks()[1] - ax.get_xticks()[0]
+    ax_y_major_tick_length = ax.get_yticks()[1] - ax.get_yticks()[0]
+    
+    # Adjust upper x and y ticks to cover all data
+    if x_up == None:        
+        ax.set_xlim(right=max_x_tick + ax_x_major_tick_length)
+    if y_up == None:
+        ax.set_ylim(top=max_y_tick + ax_y_major_tick_length)
+    if x_lo == None:
+        ax.set_xlim(left=min_x_tick - ax_x_major_tick_length)
+    if y_lo == None:
+        ax.set_ylim(bottom=min_y_tick - ax_y_major_tick_length)
+    
+    # Put ticks to inside
+    ax.tick_params(direction="in")
 
 # Define decorator to log SQL operations
 def logger(func):
@@ -287,6 +340,8 @@ def plot_isotherm_EQvNE_multiT(
     no_p_points: int = 20,
     MW2: float = None,
     xlxs_sheet_refno_list: list[str] = None,
+    include_EQ: bool = True,
+    include_NE: bool = True,
     display_plot: bool = True,
     save_plot_dir: str = None,
 ) -> None:
@@ -386,30 +441,17 @@ def plot_isotherm_EQvNE_multiT(
     for i, T in enumerate(T_list):
         
         #* Calculate EQ solubility
-        solubility_EQ[i] = [NE_SAFT.solve_solubility_EQ(T, p_, sol, pol, MW2) for p_ in p_calc]
-        solubility_NE[i] = [NE_SAFT.solve_solubility_NE(T, p_, sol, pol, MW2, ksw_list[i], rho20_list[i]) for p_ in p_calc]
-        print("\nSolubility_EQ at %s°C: " % (T - 273), solubility_EQ[i])
-        print("\nSolubility_NE at %s°C and ksw = %g:" % (T - 273, ksw_list[i]), solubility_NE[i])
-    
-    # Calculate upper limits of x and y axis
-    x_min, x_max = float('inf'), float('-inf')
-    y_min, y_max = float('inf'), float('-inf')
-    for i, T in enumerate(T_list):
-        for j, sheet in enumerate(matched_sheets[i]):
-            x_min = min(x_min, min(dict[sheet]["P [MPa]"]))
-            x_max = max(x_max, max(dict[sheet]["P [MPa]"]))
-            y_min = min(y_min, min(dict[sheet]["Solubility [g-sol/g-pol-am]"]))
-            y_max = max(y_max, max(dict[sheet]["Solubility [g-sol/g-pol-am]"]))
-        y_min = min(y_min, min(solubility_EQ[i]))
-        y_max = max(y_max, max(solubility_EQ[i]))
-        if solubility_NE[i] is not None:
-            y_min = min(y_min, min([x for x in solubility_NE[i] if x is not None]))
-            y_max = max(y_max, max([x for x in solubility_NE[i] if x is not None]))
+        if include_EQ == True:
+            solubility_EQ[i] = [NE_SAFT.solve_solubility_EQ(T, p_, sol, pol, MW2) for p_ in p_calc]
+            print("\nSolubility_EQ at %s°C: " % (T - 273), solubility_EQ[i])
+        
+        #* Calculate NE solubility
+        if include_NE == True:
+            solubility_NE[i] = [NE_SAFT.solve_solubility_NE(T, p_, sol, pol, MW2, ksw_list[i], rho20_list[i]) for p_ in p_calc]
+            print("\nSolubility_NE at %s°C and ksw = %g:" % (T - 273, ksw_list[i]), solubility_NE[i])
 
     # Plotting
-    # fig = plt.figure()    #* To be restored
-    fig = plt.figure(figsize=[4.0, 3.5])    #! To be deleted
-    
+    fig = plt.figure()
     ax = fig.add_subplot(111)
 
     for i, T in enumerate(T_list):
@@ -422,60 +464,44 @@ def plot_isotherm_EQvNE_multiT(
                     dict[sheet]["Solubility [g-sol/g-pol-am]"],
                     color=NE_SAFT.custom_colours[i],
                     marker=NE_SAFT.custom_markers[j],
-                    # markersize=2,   #! To be deleted
+                    # markersize=2,
                     linestyle="None",
                     markerfacecolor="None",
-                    label=f"exp {T-273}°C: {ref_ID[i][j]} ({ref_no[i][j]})",
+                    label=f"exp {T-273}°C: {ref_ID[i][j]}",
                 )
                 
         #* EQ calc
-        ax.plot(
-            p_MPa_calc,
-            solubility_EQ[i],
-            color=NE_SAFT.custom_colours[i],
-            marker="None",
-            linestyle="dashed",
-            label=f"EQ model {T-273}°C",
-        )
+        if include_EQ == True:
+            ax.plot(
+                p_MPa_calc,
+                solubility_EQ[i],
+                color=NE_SAFT.custom_colours[i],
+                marker="None",
+                linestyle="dashed",
+                label=f"EQ model {T-273}°C",
+            )
 
-    # NE solubility    
-        ax.plot(
-            p_MPa_calc,
-            solubility_NE[i],
-            color=NE_SAFT.custom_colours[i],
-            marker="None",
-            linestyle="solid", 
-            label=f"NE model {T-273}°C",
-        )
+        # NE solubility    
+        if include_NE == True:
+            ax.plot(
+                p_MPa_calc,
+                solubility_NE[i],
+                color=NE_SAFT.custom_colours[i],
+                marker="None",
+                linestyle="solid", 
+                label=f"NE model {T-273}°C",
+            )
         
     # Labelling
-    # ax.set_xlabel(r"p (MPa)")   #* To be restored
-    # ax.set_ylabel(r"Solubility ($g_{sol} \; / \;g_{pol}$)") #* To be restored
-    # ax.set_title(r"%s-%s" % (sol, pol)) #* To be restored
+    ax.set_xlabel(r"p (MPa)")
+    ax.set_ylabel(r"Solubility ($g_{sol} \; / \;g_{pol}$)")
+    # ax.set_title(r"%s-%s" % (sol, pol)) 
     
-    # Adjust x and y tick to cover all data
-    # Get the length of major ticks on the x-axis
-    x_major_tick_length = ax.get_xticks()[1] - ax.get_xticks()[0]
-    
-    # Get the length of major ticks on the y-axis
-    y_major_tick_length = ax.get_yticks()[1] - ax.get_yticks()[0]
-    
-    # Set adjust x and y tick to cover all data
-    ax.set_xticks(range(0, 6))  #! To be deleted
-    ax.set_xlim(left=0, right=x_max + x_major_tick_length)
-    ax.set_ylim(bottom=0, top=y_max + y_major_tick_length)    
-    ax.set_xlim(left=0, right=5)  #! To be deleted
-    # ax.set_ylim(bottom=0, top=0.10 )    #! for PS, To be deleted
-    ax.set_ylim(bottom=0, top=0.20 )    #! for PMMA, To be deleted
-    ax.tick_params(axis='both', which='major', labelsize=15)    #! To be deleted
-    
-
-
-    # Set ticks to appear inside
-    ax.tick_params(direction="in")
+    # Update ticks to cover all data points
+    update_subplot_ticks(ax, x_lo=0., y_lo=0.)
     
     # Dynamic column number of legend
-    # ax.legend(fontsize='xx-small', loc='upper left').set_visible(True)
+    ax.legend(loc='upper left').set_visible(True)
     
     if save_plot_dir != None:
         plt.savefig(save_plot_dir, dpi=1200)
@@ -1028,8 +1054,6 @@ if __name__ == "__main__":
     
     # Create new directory to store results
     result_folder_dir = f'{src_dir}\\Anals\\Paper plots'
-    figname = f"CO2-PMMA_35-51-81C_default_NETGP_RhoPol0PVT_pKsw_{time_ID}.png"
-    savedir = result_folder_dir + f"\\{figname}"
     
     # ksw_base = 0.008293414047454917
     # plot_isotherm_EQvNE(
@@ -1096,19 +1120,39 @@ if __name__ == "__main__":
     #     # save_plot_dir=savedir,
     # )
     
-    # plot_isotherm_EQvNE_multiT(
-    #     # p_l=1,
-    #     # p_u=25e6,
-    #     no_p_points=40,
-    #     T_list=[35+273, 51+273, 81+273],
-    #     sol="CO2",
-    #     pol="PMMA",
-    #     rho20_list=[rho20_35C, rho20_51C, rho20_81C],
-    #     ksw_list=[ksw_35C, ksw_51C, ksw_81C],
-    #     xlxs_sheet_refno_list=['8'],
-    #     display_plot=True,
-    #     save_plot_dir=savedir,
-    # )
+    #* Plot EOS vs. NET-GP results
+    # PS from PVT
+    polymer = 'PS'
+    rho20_35C = 1.042
+    rho20_51C = 1.037
+    rho20_81C = 1.030
+    ksw_35C = 0.00829
+    ksw_51C = 0.00665
+    ksw_81C = 0.00474
+    # PMMA from PVT
+    polymer = 'PMMA'
+    rho20_35C = 1.178
+    rho20_51C = 1.174
+    rho20_81C = 1.165
+    ksw_35C = 0.01805
+    ksw_51C = 0.01356
+    ksw_81C = 0.00881
+    
+    plot_isotherm_EQvNE_multiT(
+        # p_l=1,
+        # p_u=25e6,
+        no_p_points=40,
+        T_list=[35+273, 51+273, 81+273],
+        sol="CO2",
+        pol=polymer,
+        rho20_list=[rho20_35C, rho20_51C, rho20_81C],
+        ksw_list=[ksw_35C, ksw_51C, ksw_81C],
+        xlxs_sheet_refno_list=['8'],
+        include_NE=True,
+        include_EQ=True,
+        display_plot=True,
+        # save_plot_dir=result_folder_dir + f'\\CO2-{polymer}_35-51-81C_defaultEoSParameters_kswFugacity_EoSvsNETGP_fitKsw_{time_ID}.png',
+    )
     
     # plot_isotherm_EQ(
     #     # p_l=1,
