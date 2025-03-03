@@ -11,7 +11,7 @@ import shutil
 import logging
 from functools import wraps
 import NET_SAFTgMie_master as NE_SAFT
-import plot_isotherm as pltIsotherm
+import plot_isotherm_main as pltIsotherm
 
 rho20_x0_dict = {"PS": np.linspace(0.90, 1.30, 30), "PMMA": np.linspace(0.90, 1.30, 30)}
 ksw_x0_dict = {"PS": np.linspace(0.0, 0.03, 30), "PMMA": np.linspace(0.0, 0.03, 30)}
@@ -159,7 +159,7 @@ def fitrho20_fitksw_predictksw_plotpermisotherm(solute: str, polymer: str, temp_
 
                 # * Predict ksw
                 try:
-                    ksw_p = NE_SAFT.predict_ksw_NE(T=Temp, sol=solute, pol=polymer, rho20=rho20_f)
+                    ksw_p = NE_SAFT.predict_ksw_NE_default(T=Temp, sol=solute, pol=polymer, rho20=rho20_f)
                 except Exception as e:
                     print("Error: ", e)
                     ksw_p = None
@@ -375,7 +375,7 @@ def rho20PVT_fitksw_predictksw_plotpermisotherm(solute: str, polymer: str, temp_
 
                 # * Predict ksw
                 try:
-                    ksw_p = NE_SAFT.predict_ksw_NE(T=Temp, sol=solute, pol=polymer, rho20=rho20_PVT)
+                    ksw_p = NE_SAFT.predict_ksw_NE_default(T=Temp, sol=solute, pol=polymer, rho20=rho20_PVT)
                 except Exception as e:
                     print("Error: ", e)
                     ksw_p = None
@@ -569,7 +569,7 @@ def fitrho20_fitksw_predictksw_pg(solute: str, polymer: str, temp_list: list[flo
                 figname3 = f"{solute}-{polymer}_{Temp-273}C({refno})_predictksw_{time_ID}.png"
                 savedir3 = result_folder_dir + f"\\{figname3}"
                 try:
-                    ksw_p = NE_SAFT.predict_ksw_NE(T=Temp, sol=solute, pol=polymer, rho20=rho20_f)
+                    ksw_p = NE_SAFT.predict_ksw_NE_default(T=Temp, sol=solute, pol=polymer, rho20=rho20_f)
                 except Exception as e:
                     print("Error: ", e)
                     ksw_p = None
@@ -816,7 +816,7 @@ def rho20PVT_fitrho20_fitksw_predictksw_pg(solute: str, polymer: str, temp_list:
                 figname3 = f"{solute}-{polymer}_{Temp-273}C({refno})_predictksw_{time_ID}.png"
                 savedir3 = result_folder_dir + f"\\{figname3}"
                 try:
-                    ksw_p = NE_SAFT.predict_ksw_NE(T=Temp, sol=solute, pol=polymer, rho20=rho20_PVT)
+                    ksw_p = NE_SAFT.predict_ksw_NE_default(T=Temp, sol=solute, pol=polymer, rho20=rho20_PVT)
                 except Exception as e:
                     print("Error: ", e)
                     ksw_p = None

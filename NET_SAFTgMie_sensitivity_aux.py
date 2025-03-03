@@ -324,14 +324,15 @@ def solve_solubility_EQ(
         muad_S = eos_mix.muad(rho_i_, T)  # dimensionless [mu/RT]
         return [muad_S[0] - muad_G]
 
-    x0 = linspace(9.90e-1, 9.99e-1, 10)
+    # x0 = linspace(9.90e-1, 9.99e-1, 10)   #* Default
+    x0 = linspace(0.2, 9.99e-1, 30)   #* Test
     
     # TODO add x0 finding mechanism
     i = 0
 
     while i < (len(x0)):
         try:
-            solution = fsolve(func, x0=x0[i], xtol=1e-10)            
+            solution = fsolve(func, x0=x0[i], xtol= 1e-10)            
             residue = func(x_1_=solution)
             residue_float = [float(j) for j in residue]
             
@@ -3306,146 +3307,6 @@ def fit_polPVT_multiTait(xlxs_sheet: str, display_plot: bool = True, save_plot_d
         
         ax.tick_params(direction="in")
         ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left").set_visible(True)
-        
-        if save_plot_dir != None:
-            plt.savefig(save_plot_dir, dpi=1200)
-            print(f"Plot saved: {save_plot_dir}")
-            print("")
-        
-        if display_plot == True:
-            plt.show()
-
-        return a0, a1, a2, B0, B1, T_C_lower, T_C_upper, df
-
-
-def fit_polPVT_multiTait_custom(xlxs_sheet: str, 
-                                fig_size: tuple = None,
-                                x_lo: float = None,
-                                x_up: float = None,
-                                y_lo: float = None,
-                                y_up: float = None,
-                                display_plot: bool = True, save_plot_dir: str = None):
-    try:
-        databasepath = os.path.join(os.path.dirname(__file__), "litdata")
-        databasepath += "/pol_PVT.xlsx"
-        file = pd.ExcelFile(databasepath, engine="openpyxl")
-        df = pd.read_excel(file, sheet_name=xlxs_sheet)
-
-    except Exception as e:
-        print("Error: ")
-        print(e)
-        return None
-    else:
-
-        def V_func(X, a0, a1, a2, B0, B1):
-            T_C, p_MPa = X
-            C = 0.0894
-            B = B0 * exp(-B1 * T_C)
-            V0 = a0 + a1 * T_C + a2 * T_C**2
-            V = V0 * (1 - C * log(1 + p_MPa / B))
-            return V  # [cm^3/g]
-
-        T_C_list = df["T (°C)"].values.tolist()  # [°C]
-        p_MPa_list = df["P (MPa)"].values.tolist()  # [MPa]
-        V_exp = df["V_pol (cm3/g)"].values.tolist()  # [cm3/g]
-        result, cov = curve_fit(V_func, (T_C_list, p_MPa_list), V_exp, p0=(0.9, 2e-4, 1e-7, 100, 3e-3))
-        a0, a1, a2, B0, B1 = result
-
-        # unique pressure values
-        pMPa_unq_list = list(set(p_MPa_list))  # [MPa]
-        pMPa_unq_list.sort()
-        T_C_unq_list = list(set(T_C_list))  # [°C]
-        T_C_unq_list.sort()
-
-        T_C_upper = T_C_unq_list[-1]  # [°C]
-        T_C_lower = T_C_unq_list[0]  # [°C]
-        
-        print(f"T range: {T_C_lower}°C - {T_C_upper}°C")
-        print("a0 = %.3g cm^3/g" % a0)
-        print("a1 = %.3g cm^3/g°C" % a1)
-        print("a2 = %.3g cm^3/g°C^2" % a2)
-        print("B0 = %.3g MPa" % B0)
-        print("B1 = %.3g °C^-1" % B1)
-        print("")
-        
-        # Temperature values for each pressure
-        T_C = [None for i in range(len(pMPa_unq_list))]
-        for i, p in enumerate(pMPa_unq_list):
-            T_C[i] = df[(df["P (MPa)"] == p)]["T (°C)"].values.tolist()  # [MPa]
-        
-        # V values for each pressure
-        V_exp = [None for i in range(len(pMPa_unq_list))]
-        V_multiTait = [None for i in range(len(pMPa_unq_list))]
-        for i, p in enumerate(pMPa_unq_list):
-            V_exp[i] = df[(df["P (MPa)"] == p)]["V_pol (cm3/g)"].values.tolist()
-            V_multiTait[i] = [V_func((_T_C, p), a0, a1, a2, B0, B1) for _T_C in T_C[i]]
-        # Calculate upper limits of x and y axis
-        x_min, x_max = float('inf'), float('-inf')
-        y_min, y_max = float('inf'), float('-inf')
-        for i, p in enumerate(pMPa_unq_list):
-            x_min = min(x_min, min(T_C[i]))
-            x_max = max(x_max, max(T_C[i]))            
-            y_min = min(y_min, min(V_exp[i] + V_multiTait[i]))
-            y_max = max(y_max, max(V_exp[i] + V_multiTait[i]))
-        
-        title_dict = {'PS_rubbery': 'PS (rubbery)', 'PS_glassy': 'PS (glassy)', 
-                      'PMMA_rubbery': 'PMMA (rubbery)', 'PMMA_glassy': 'PMMA (glassy)'}
-        
-        # Plotting
-        if fig_size == None:
-            fig = plt.figure(figsize=(4.8, 3.5))  # Default        
-        elif isinstance(fig_size, tuple):
-            fig = plt.figure(figsize=fig_size)  # Big plot        
-        else:
-            fig = plt.figure(figsize=(4.8, 3.5))  # Default
-        
-        ax = fig.add_subplot(111)
-        colours = list(Color("silver").range_to(Color("maroon"), len(pMPa_unq_list)))  # colour gradient
-
-        for i, p in enumerate(pMPa_unq_list):
-            # Multi-Tait model
-            # _TC = df[(df["P (MPa)"] == p)]["T (°C)"].values.tolist()  # [MPa]
-            # _V_ = [V_func((_T_, p), a0, a1, a2, B0, B1) for _T_ in _TC]
-            ax.plot(
-                T_C[i],
-                V_multiTait[i],
-                color="%s" % colours[i],
-                marker="None",
-                linestyle="solid",
-                label="{:.0f} MPa".format(p),
-            )
-            # exp data
-            ax.scatter(
-                # df[(df["P (MPa)"] == p)]["T (°C)"],
-                T_C[i],
-                # df[(df["P (MPa)"] == p)]["V_pol (cm3/g)"],
-                V_multiTait[i],
-                color="%s" % colours[i],
-                marker="x",
-                linestyle="None",
-            )
-
-        ax.set_xlabel("T / °C")
-        ax.set_ylabel(r"$\hat{V}_{pol}$ / $cm^{3} \; g^{-1}$")
-        # ax.set_title(title_dict[xlxs_sheet])
-        
-        # Get the length of major ticks on the x-axis
-        x_major_tick_length = ax.get_xticks()[1] - ax.get_xticks()[0]
-        
-        # Get the length of major ticks on the y-axis
-        y_major_tick_length = ax.get_yticks()[1] - ax.get_yticks()[0]
-        
-        # Set adjust x and y tick to cover all data
-        ax.set_xlim(left=x_min - x_major_tick_length, right=x_max + x_major_tick_length)    # Default
-        ax.set_ylim(bottom=y_min - y_major_tick_length, top=y_max + y_major_tick_length)    # Default
-        # ax.set_xlim(left=x_min - x_major_tick_length, right=x_max + 2*x_major_tick_length)    # For paper
-        # ax.set_ylim(bottom=y_min - y_major_tick_length, top=y_max + y_major_tick_length)    # For paper
-        
-        ax.tick_params(direction="in")
-        
-        ax.set_xlim(left=x_lo, right=x_up)
-        ax.set_ylim(bottom=y_lo, top=y_up)
-        # ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left").set_visible(True)
         
         if save_plot_dir != None:
             plt.savefig(save_plot_dir, dpi=1200)
