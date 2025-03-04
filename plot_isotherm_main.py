@@ -37,17 +37,17 @@ matplotlib.rcParams["figure.autolayout"] = True
 
 # Paper references
 paper_ref_dict = {
-    'Wissinger 1987': '34',
-    'Pantoula 2006': '35',
-    'Zhang 1997': '37',
-    'Wong 1998': '41',
-    'Conforti 1996': '42',
-    'Chiou 1986': '47',   
-    'Sato 1996': '38',
-    'Sato 2001': '40',
-    'Vogt 2003': '36',
-    'Edwards 1998': '57',
-    'Ushiki 2019': '44',
+    'Wissinger 1987': '32',
+    'Pantoula 2006': '33',
+    'Vogt 2003': '34',
+    'Zhang 1997': '35',
+    'Sato 1996': '36',
+    'Sato 2001': '38',
+    'Wong 1998': '39',
+    'Conforti 1996': '40',
+    'Ushiki 2019': '42',
+    'Chiou 1986': '45',   
+    'Edwards 1998': '55',
 }
 
 def update_subplot_ticks(ax, x_lo=None, y_lo=None, x_up=None, y_up=None):
@@ -986,13 +986,14 @@ def plot_isotherm_EQvNE_multiT_custom3(
     xlxs_sheet_refno_list: list[str] = None,
     include_EQ: bool = True,
     include_NE: bool = True,
-    display_plot: bool = True,
     fig_size: tuple = None,
     x_lo: float = None,
     x_up: float = None,
     y_lo: float = None,
     y_up: float = None,
     legend_loc: str = 'best',
+    label: str = None,
+    display_plot: bool = True,
     save_plot_dir: str = None,
     save_data_dir: str = None,
 ) -> None:
@@ -1089,8 +1090,7 @@ def plot_isotherm_EQvNE_multiT_custom3(
         
     p_MPa_calc = p_calc * 1e-6  # [MPa]        
         
-    for i, T in enumerate(T_list):
-        
+    for i, T in enumerate(T_list):        
         #* Calculate EQ solubility
         if include_EQ == True:
             solubility_EQ[i] = [NE_SAFT.solve_solubility_EQ(T, p_, sol, pol, MW2) for p_ in p_calc]
@@ -1122,7 +1122,7 @@ def plot_isotherm_EQvNE_multiT_custom3(
     if fig_size == None:
         fig = plt.figure()  # Default        
     elif isinstance(fig_size, tuple):
-        fig = plt.figure(figsize=fig_size)  # Big plot        
+        fig = plt.figure(figsize=fig_size)      
     else:
         fig = plt.figure()  # Default
     
@@ -1173,6 +1173,10 @@ def plot_isotherm_EQvNE_multiT_custom3(
     
     # Dynamic column number of legend
     ax.legend(loc=legend_loc).set_visible(True)
+    
+    # Add label
+    if label != None:
+        fig.text(0., 0.98, f'{label}', ha='left', va='top', transform=fig.transFigure)
     
     if save_plot_dir != None:
         plt.savefig(save_plot_dir, dpi=1200)

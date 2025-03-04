@@ -36,15 +36,30 @@ import external_phase as ext
 
 
 # Plotting master configuration
-matplotlib.rcParams["figure.figsize"] = [4.0, 3.5]  # in inches
+# matplotlib.rcParams["figure.figsize"] = [4.0, 3.5]  # in inches
+# matplotlib.rcParams["mathtext.default"] = "regular"  # same as regular text
+# matplotlib.rcParams["font.family"] = "DejaVu Sans"  # alternative: "serif"
+# matplotlib.rcParams["font.size"] = 10.0
+# matplotlib.rcParams["axes.titlesize"] = "small"  # relative to font.size
+# matplotlib.rcParams["axes.labelsize"] = "small"  # relative to font.size
+# matplotlib.rcParams["xtick.labelsize"] = "x-small"  # relative to font.size
+# matplotlib.rcParams["ytick.labelsize"] = "x-small"  # relative to font.size
+# matplotlib.rcParams["legend.fontsize"] = "xx-small"  # relative to font.size
+# matplotlib.rcParams["legend.frameon"] = False
+# matplotlib.rcParams["grid.linestyle"] = "-."
+# matplotlib.rcParams["grid.linewidth"] = 0.15  # in point units
+# matplotlib.rcParams["figure.autolayout"] = True
+
+# matplotlib parameters for paper
+# matplotlib.rcParams["figure.figsize"] = [4.0, 3.5]  # in inches
 matplotlib.rcParams["mathtext.default"] = "regular"  # same as regular text
 matplotlib.rcParams["font.family"] = "DejaVu Sans"  # alternative: "serif"
-matplotlib.rcParams["font.size"] = 10.0
-matplotlib.rcParams["axes.titlesize"] = "small"  # relative to font.size
-matplotlib.rcParams["axes.labelsize"] = "small"  # relative to font.size
-matplotlib.rcParams["xtick.labelsize"] = "x-small"  # relative to font.size
-matplotlib.rcParams["ytick.labelsize"] = "x-small"  # relative to font.size
-matplotlib.rcParams["legend.fontsize"] = "xx-small"  # relative to font.size
+matplotlib.rcParams["font.size"] = 7.0
+matplotlib.rcParams["axes.titlesize"] = 7  
+matplotlib.rcParams["axes.labelsize"] = 7  
+matplotlib.rcParams["xtick.labelsize"] = 7 
+matplotlib.rcParams["ytick.labelsize"] = 7 
+matplotlib.rcParams["legend.fontsize"] = 7 
 matplotlib.rcParams["legend.frameon"] = False
 matplotlib.rcParams["grid.linestyle"] = "-."
 matplotlib.rcParams["grid.linewidth"] = 0.15  # in point units
@@ -107,14 +122,14 @@ def get_mixture_info(sol: str, pol: str, MW2: float = None):
         if pol == "PS":
             k_sw_ref = 0.0060  # CO2-PS [MPa^-1]
             n = math.ceil(MW_2 / MW_monomer)  # round up
-            polymer_obj = component(GC={"aCH": 5 * n,"aCCH": 1 * n,"CH2": 1 * n})   #* Default
-            # polymer_obj = component(GC={"aCH_PS": 5 * n, "aCCH": 1 * n, "CH2": 1 * n})  # *Optimised
+            # polymer_obj = component(GC={"aCH": 5 * n,"aCCH": 1 * n,"CH2": 1 * n})   #* Default
+            polymer_obj = component(GC={"aCH_PS": 5 * n, "aCCH": 1 * n, "CH2": 1 * n})  # *Optimised
 
         elif pol == "PMMA":
             k_sw_ref = 0.027  # CO2-PMMA [MPa^-1]
             n = math.ceil(MW_2 / MW_monomer)  # round up
-            polymer_obj = component(GC={"CH2": 1 * n, "C": 1 * n, "CH3": 2 * n, "COO": 1 * n})  # * Default
-            # polymer_obj = component(GC={"CH2": 1 * n, "C": 1 * n, "CH3": 2 * n, "COO_PMMA": 1 * n})  # * Optimised
+            # polymer_obj = component(GC={"CH2": 1 * n, "C": 1 * n, "CH3": 2 * n, "COO": 1 * n})  # * Default
+            polymer_obj = component(GC={"CH2": 1 * n, "C": 1 * n, "CH3": 2 * n, "COO_PMMA": 1 * n})  # * Optimised
         
         elif pol == "PEEK":
             k_sw_ref = 0.00  # CO2-PMMA [MPa^-1]
@@ -3324,6 +3339,7 @@ def fit_polPVT_multiTait_custom(xlxs_sheet: str,
                                 x_up: float = None,
                                 y_lo: float = None,
                                 y_up: float = None,
+                                label: str = None,
                                 display_plot: bool = True, save_plot_dir: str = None):
     try:
         databasepath = os.path.join(os.path.dirname(__file__), "litdata")
@@ -3446,6 +3462,10 @@ def fit_polPVT_multiTait_custom(xlxs_sheet: str,
         ax.set_xlim(left=x_lo, right=x_up)
         ax.set_ylim(bottom=y_lo, top=y_up)
         # ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left").set_visible(True)
+        
+        # Add label
+        if label != None:
+            fig.text(0., 0.98, f'{label}', ha='left', va='top', transform=fig.transFigure)
         
         if save_plot_dir != None:
             plt.savefig(save_plot_dir, dpi=1200)

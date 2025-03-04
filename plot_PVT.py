@@ -11,6 +11,22 @@ import numpy as np
 import re
 import shutil
 from colour import Color
+import matplotlib
+
+# matplotlib parameters
+# matplotlib.rcParams["figure.figsize"] = [4.0, 3.5]  # in inches
+matplotlib.rcParams["mathtext.default"] = "regular"  # same as regular text
+matplotlib.rcParams["font.family"] = "DejaVu Sans"  # alternative: "serif"
+matplotlib.rcParams["font.size"] = 7.0
+matplotlib.rcParams["axes.titlesize"] = 7  
+matplotlib.rcParams["axes.labelsize"] = 7  
+matplotlib.rcParams["xtick.labelsize"] = 7 
+matplotlib.rcParams["ytick.labelsize"] = 7 
+matplotlib.rcParams["legend.fontsize"] = 7 
+matplotlib.rcParams["legend.frameon"] = False
+matplotlib.rcParams["grid.linestyle"] = "-."
+matplotlib.rcParams["grid.linewidth"] = 0.15  # in point units
+matplotlib.rcParams["figure.autolayout"] = True
 
 # def update_subplot_ticks(ax, x_lo=None, y_lo=None, x_up=None, y_up=None):
 #     """Update x and y ticks of subplot ax to cover all data. Put ticks to inside.
@@ -261,6 +277,7 @@ def plot_pol_pvt_EosPrediction_custom2(
     x_up: float = None,
     y_lo: float = None,
     y_up: float = None,
+    label: str = None,
     fig_size: tuple = None,
     display_plot: bool = True,
     save_plot_dir: str = None,
@@ -347,6 +364,10 @@ def plot_pol_pvt_EosPrediction_custom2(
         # Set legend outside the plot
         # ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left").set_visible(True)
         
+        # Add label
+        if label != None:
+            fig.text(0., 0.98, f'{label}', ha='left', va='top', transform=fig.transFigure)
+        
         if save_plot_dir != None:
             plt.savefig(save_plot_dir, dpi=1200)
             print(f"Plot saved: {save_plot_dir}")
@@ -363,6 +384,7 @@ def plot_pol_pvt_EosPrediction_custom3(
     x_up: float = None,
     y_lo: float = None,
     y_up: float = None,
+    label: str = None,
     fig_size: tuple = None,
     display_plot: bool = True,
     save_plot_dir: str = None,
@@ -448,6 +470,10 @@ def plot_pol_pvt_EosPrediction_custom3(
         
         # Set legend outside the plot
         # ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left").set_visible(True)
+        
+        # Add label
+        if label != None:
+            fig.text(0., 0.98, f'{label}', ha='left', va='top', transform=fig.transFigure)
         
         if save_plot_dir != None:
             plt.savefig(save_plot_dir, dpi=1200)
@@ -538,7 +564,7 @@ if __name__ == "__main__":
     # figname = f"PS_PVT_default_{time_ID}.png"
     # savedir = result_folder_dir + f"\\{figname}"
     state = 'rubbery'
-    eos_parameter_type = 'default'
+    eos_parameter_type = 'fitted'
     
     polymer = 'PS'
     # plot_pol_pvt_EosPrediction_custom(pol=polymer,
@@ -553,17 +579,19 @@ if __name__ == "__main__":
     #                            x_lo=100, x_up=275,
     #                            y_lo=0.9, y_up=1.15,
     #                            fig_size=(3.0, 2.5),
-    #                            display_plot=True,
-    #                            save_plot_dir=f'Anals/Paper plots/{polymer}density_{state}_{eos_parameter_type}EoSparameters.svg',
+    #                            label='a)',
+    #                            display_plot=False,
+    #                            save_plot_dir=f'Anals/Paper plots/{polymer}density_{state}_{eos_parameter_type}EoSparameters.png',
     #                            )
-    # plot_pol_pvt_EosPrediction_custom3(pol=polymer,
-    #                            pol_state=state,
-    #                            x_lo=100, x_up=275,
-    #                            y_lo=0.9, y_up=1.15,
-    #                            fig_size=(3.0, 2.5),
-    #                            display_plot=True,
-    #                            save_plot_dir=f'Anals/Paper plots/{polymer}density_{state}_{eos_parameter_type}EoSparameters.svg',
-    #                            )
+    plot_pol_pvt_EosPrediction_custom3(pol=polymer,
+                               pol_state=state,
+                               x_lo=100, x_up=275,
+                               y_lo=0.9, y_up=1.15,
+                               label='a)',
+                               fig_size=(3.0, 2.5),
+                               display_plot=False,
+                               save_plot_dir=f'Anals/Paper plots/{polymer}density_{state}_{eos_parameter_type}EoSparameters.png',
+                               )
     polymer = 'PMMA'
     # plot_pol_pvt_EosPrediction_custom(pol=polymer,
     #                            pol_state=state,
@@ -571,29 +599,24 @@ if __name__ == "__main__":
     #                            x_lo=90,
     #                            save_plot_dir=f'Anals/Paper plots/{polymer}density_{state}_{eos_parameter_type}EoSparameters.svg',
     #                            )
-    plot_pol_pvt_EosPrediction_custom2(pol=polymer,
-                               pol_state=state,
-                                x_lo=100, x_up=250,
-                                y_lo=0.8, y_up=1.3,
-                                fig_size=(3.0, 2.5),
-                                display_plot=False,
-                                save_plot_dir=f'Anals/Paper plots/{polymer}density_{state}_{eos_parameter_type}EoSparameters.svg',
-                                )
     # plot_pol_pvt_EosPrediction_custom2(pol=polymer,
     #                            pol_state=state,
-    #                            x_lo=90,
-    #                            fig_size=(3.0, 2.5),
-    #                            display_plot=False,
-    #                            save_plot_dir=f'Anals/Paper plots/{polymer}density_{state}_{eos_parameter_type}EoSparameters.svg',
-    #                            )
-    # plot_pol_pvt_EosPrediction_custom3(pol=polymer,
-    #                            pol_state=state,
-    #                            x_lo=100, x_up=250,
-    #                            y_lo=1.05, y_up=1.25,
-    #                            fig_size=(3.0, 2.5),
-    #                            display_plot=False,
-    #                            save_plot_dir=f'Anals/Paper plots/{polymer}density_{state}_{eos_parameter_type}EoSparameters.svg',
-    #                            )
+    #                             x_lo=100, x_up=250,
+    #                             y_lo=0.8, y_up=1.3,
+    #                             fig_size=(3.0, 2.5),
+    #                             label='b)',
+    #                             display_plot=False,
+    #                             save_plot_dir=f'Anals/Paper plots/{polymer}density_{state}_{eos_parameter_type}EoSparameters.png',
+    #                             )
+    plot_pol_pvt_EosPrediction_custom3(pol=polymer,
+                               pol_state=state,
+                               x_lo=100, x_up=250,
+                               y_lo=1.05, y_up=1.25,
+                               label='b)',
+                               fig_size=(3.0, 2.5),
+                               display_plot=False,
+                               save_plot_dir=f'Anals/Paper plots/{polymer}density_{state}_{eos_parameter_type}EoSparameters.png',
+                               )
 
     # plot_pol_PVT_exp(pol="PS",
     #                  display_plrubotherot=True, 

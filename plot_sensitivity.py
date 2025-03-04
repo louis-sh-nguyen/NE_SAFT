@@ -11,7 +11,23 @@ import numpy as np
 import re
 import shutil
 from colour import Color
+import matplotlib
 from plot_isotherm_main import update_subplot_ticks
+
+# matplotlib parameters
+# matplotlib.rcParams["figure.figsize"] = [4.0, 3.5]  # in inches
+matplotlib.rcParams["mathtext.default"] = "regular"  # same as regular text
+matplotlib.rcParams["font.family"] = "DejaVu Sans"  # alternative: "serif"
+matplotlib.rcParams["font.size"] = 7.0
+matplotlib.rcParams["axes.titlesize"] = 7  
+matplotlib.rcParams["axes.labelsize"] = 7  
+matplotlib.rcParams["xtick.labelsize"] = 7 
+matplotlib.rcParams["ytick.labelsize"] = 7 
+matplotlib.rcParams["legend.fontsize"] = 7 
+matplotlib.rcParams["legend.frameon"] = False
+matplotlib.rcParams["grid.linestyle"] = "-."
+matplotlib.rcParams["grid.linewidth"] = 0.15  # in point units
+matplotlib.rcParams["figure.autolayout"] = True
 
 def plot_noRepeatingUnit_sensitivity_EQ(
     no_l: float,
@@ -91,6 +107,7 @@ def plot_noRepeatingUnit_sensitivity_EQ_custom(
     x_up: float = None,
     y_lo: float = None,
     y_up: float = None,
+    label: str = None,
     display_plot: bool = True,
     save_plot_dir: str = None,
 ):
@@ -143,6 +160,10 @@ def plot_noRepeatingUnit_sensitivity_EQ_custom(
     # Set legend location and handlelength
     # ax.legend(handlelength=2.6).set_visible(True)
     
+    # Add label
+    if label != None:
+        fig.text(0., 0.98, f'{label}', ha='left', va='top', transform=fig.transFigure)
+    
     if save_plot_dir != None:
         plt.savefig(save_plot_dir, dpi=1200)
         print(f"Plot saved: {save_plot_dir}")
@@ -178,19 +199,21 @@ if __name__ == "__main__":
     #                                     )
     
     # Number of repeating unit sensitivity
-    # plot_noRepeatingUnit_sensitivity_EQ_custom(no_l=1, no_u=300, no_of_points=20, 
-    #                                     T=100+273, p=1.0e6,
-    #                                     sol='CO2', pol='PS',
-    #                                     x_lo=0, y_lo=0, 
-    #                                     fig_size=(4.0, 3.5),
-    #                                     display_plot=True,                                        
-    #                                     # save_plot_dir=f'Anals/Paper plots/CO2-PS_100C_1MPa_SolubilityEQ_noRepeatingUnitSensitivity_{get_time_ID()}.svg'
-    #                                     )
-    plot_noRepeatingUnit_sensitivity_EQ_custom(no_l=1, no_u=300, no_of_points=20, 
+    plot_noRepeatingUnit_sensitivity_EQ_custom(no_l=1, no_u=300, no_of_points=100, 
+                                        T=100+273, p=1.0e6,
+                                        sol='CO2', pol='PS',
+                                        x_lo=0, y_lo=0, 
+                                        fig_size=(3.0, 2.5),
+                                        label='a)',
+                                        display_plot=False, 
+                                        save_plot_dir=f'Anals/Paper plots/CO2-PS_100C_1MPa_SolubilityEQ_noRepeatingUnitSensitivity.png'
+                                        )
+    plot_noRepeatingUnit_sensitivity_EQ_custom(no_l=1, no_u=300, no_of_points=100, 
                                     T=100+273, p=1.0e6,
                                     sol='CO2', pol='PMMA',
                                     x_lo=0, y_lo=0, 
-                                    fig_size=(4.0, 3.5),
-                                    display_plot=True,                                        
-                                    # save_plot_dir=f'Anals/Paper plots/CO2-PS_100C_1MPa_SolubilityEQ_noRepeatingUnitSensitivity_{get_time_ID()}.svg'
+                                    fig_size=(3.0, 2.5),
+                                    label='b)',
+                                    display_plot=False,                                        
+                                    save_plot_dir=f'Anals/Paper plots/CO2-PMMA_100C_1MPa_SolubilityEQ_noRepeatingUnitSensitivity.png'
                                     )
